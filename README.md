@@ -153,7 +153,268 @@ crane-creek-sensors/
 
 ## Quick Start
 
-### Command Line Mode
+### Raspberry Pi Setup
+
+#### 1. Raspberry Pi OS Installation
+
+**Recommended Hardware:**
+- Raspberry Pi 4B (4GB+ RAM) or Raspberry Pi 5
+- 32GB+ microSD card (Class 10 or better)
+- 5V 3A power supply
+- Ethernet cable (for initial setup)
+
+**Install Raspberry Pi OS:**
+```bash
+# Download Raspberry Pi Imager from: https://rpi.org/imager
+# Flash Raspberry Pi OS Lite (64-bit) to microSD card
+# Enable SSH and configure Wi-Fi during imaging (recommended)
+```
+
+#### 2. Initial Raspberry Pi Configuration
+
+**SSH into your Raspberry Pi:**
+```bash
+# Find your Pi's IP address (check router admin or use network scanner)
+ssh pi@192.168.1.XXX  # Replace with your Pi's IP
+
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install required system packages
+sudo apt install -y python3 python3-pip python3-venv git i2c-tools nginx supervisor
+```
+
+**Enable I2C for sensors:**
+```bash
+# Enable I2C interface
+sudo raspi-config
+# Navigate to: Interface Options > I2C > Enable
+
+# Verify I2C is working
+sudo i2cdetect -y 1
+# Should show connected I2C devices
+```
+
+#### 3. Clone and Setup Project
+
+**Download the project:**
+```bash
+# Clone from GitHub
+cd /home/pi
+git clone https://github.com/shawnj82/greenhouse-control-system.git
+cd greenhouse-control-system
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies for Raspberry Pi
+pip install -r requirements.txt
+```
+
+#### 4. Hardware Setup
+
+**GPIO Pin Configuration:**
+```python
+# Default pin assignments (modify in main.py/web_app.py as needed)
+RELAY_PINS = {
+    'relay_1': 18,  # LED lights
+    'relay_2': 24,  # Water pump
+    'relay_3': 25,  # Exhaust fan
+    'relay_4': 8    # Heater
+}
+
+FAN_PWM_PIN = 12    # PWM fan control
+DHT22_PIN = 22      # Temperature/humidity sensor
+```
+
+**Connect sensors and devices:**
+```bash
+# I2C devices (light sensors) - use standard I2C pins:
+# GPIO 2 (SDA) and GPIO 3 (SCL)
+
+# DHT22 temperature/humidity sensor:
+# VCC -> 3.3V, GND -> GND, DATA -> GPIO 22
+
+# Relays (for lights, pumps, fans):
+# Connect relay control pins to designated GPIO pins
+# Use relay boards with optoisolation for safety
+
+# PWM Fan:
+# PWM signal -> GPIO 12, Power through relay or direct 12V supply
+```
+
+#### 5. Configure the System
+
+**Create configuration files:**
+```bash
+# Copy example configurations
+cp data/zones.json.example data/zones.json        # If example exists
+cp data/lights.json.example data/lights.json      # If example exists
+
+# Edit configurations for your setup
+nano data/zones.json      # Configure your growing zones
+nano data/lights.json     # Configure your LED lights
+nano data/light_sensors.json  # Configure your sensors
+```
+
+**Set permissions:**
+```bash
+# Ensure data directory is writable
+chmod -R 755 data/
+chown -R pi:pi data/
+
+# Set execute permissions
+chmod +x main.py web_app.py
+```
+
+#### 6. Test the System
+
+**Test sensors and hardware:**
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Test basic sensor reading
+python3 main.py
+
+# Test web interface
+python3 web_app.py
+# Access via http://your-pi-ip:5000
+```
+
+**Verify I2C sensors:**
+```bash
+# Check connected I2C devices
+sudo i2cdetect -y 1
+
+# Test light sensors specifically
+python3 -c "
+from sensors.bh1750 import BH1750Sensor
+sensor = BH1750Sensor()
+print('Light level:', sensor.read_light())
+"
+```
+
+#### 7. Production Deployment
+
+**Install as system service:**
+```bash
+# Create systemd service file
+sudo nano /etc/systemd/system/greenhouse.service
+```
+
+**Service file content:**
+```ini
+[Unit]
+Description=Greenhouse Control System
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/greenhouse-control-system
+Environment=PATH=/home/pi/greenhouse-control-system/venv/bin
+ExecStart=/home/pi/greenhouse-control-system/venv/bin/python web_app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Enable and start service:**
+```bash
+# Reload systemd and enable service
+sudo systemctl daemon-reload
+sudo systemctl enable greenhouse.service
+sudo systemctl start greenhouse.service
+
+# Check status
+sudo systemctl status greenhouse.service
+
+# View logs
+sudo journalctl -u greenhouse.service -f
+```
+
+**Configure Nginx reverse proxy (optional):**
+```bash
+# Create Nginx site configuration
+sudo nano /etc/nginx/sites-available/greenhouse
+```
+
+**Nginx configuration:**
+```nginx
+server {
+    listen 80;
+    server_name your-pi-hostname.local;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Enable Nginx site:**
+```bash
+# Enable site and restart Nginx
+sudo ln -s /etc/nginx/sites-available/greenhouse /etc/nginx/sites-enabled/
+sudo nginx -t  # Test configuration
+sudo systemctl restart nginx
+```
+
+#### 8. Advanced Configuration
+
+**Set up automatic updates:**
+```bash
+# Create update script
+nano /home/pi/update-greenhouse.sh
+```
+
+**Update script content:**
+```bash
+#!/bin/bash
+cd /home/pi/greenhouse-control-system
+git pull origin main
+source venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl restart greenhouse.service
+echo "Greenhouse system updated: $(date)" >> /home/pi/update.log
+```
+
+**Make executable and add to cron:**
+```bash
+chmod +x /home/pi/update-greenhouse.sh
+
+# Add to crontab for weekly updates
+crontab -e
+# Add line: 0 2 * * 0 /home/pi/update-greenhouse.sh
+```
+
+**Configure log rotation:**
+```bash
+# Create logrotate configuration
+sudo nano /etc/logrotate.d/greenhouse
+```
+
+**Logrotate configuration:**
+```
+/home/pi/greenhouse-control-system/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}
+```
+
+### Command Line Mode (Development/Testing)
 
 1. Create virtual environment and install dependencies:
 
@@ -424,6 +685,57 @@ All configurations support runtime updates through the web interface or API call
 
 ## Hardware Notes
 
+### 🍓 **Raspberry Pi Recommendations**
+
+**Recommended Models:**
+- **Pi 4B (4GB+)**: Best performance, handles multiple sensors and web interface smoothly
+- **Pi 5**: Latest model with excellent performance and improved I/O
+- **Pi 3B+**: Minimum recommendation, may struggle with intensive operations
+- **Pi Zero 2 W**: Good for sensor nodes in multi-node setups
+
+**Essential Accessories:**
+- **High-quality microSD card**: SanDisk Extreme or Samsung EVO (32GB+ Class 10)
+- **Official power supply**: 5V 3A for Pi 4/5, prevents under-voltage issues
+- **Heat sinks/fan**: Recommended for continuous operation
+- **Case with ventilation**: Protects from dust and moisture
+- **GPIO expansion board**: Makes wiring easier and safer
+
+**Sensor Wiring Guide:**
+```
+I2C Sensors (BH1750, TSL2591, TCS34725, etc.):
+├── VCC/VIN → 3.3V (Pin 1)
+├── GND     → Ground (Pin 6)
+├── SDA     → GPIO 2 (Pin 3)
+└── SCL     → GPIO 3 (Pin 5)
+
+DHT22 Temperature/Humidity:
+├── VCC → 3.3V (Pin 1)
+├── GND → Ground (Pin 6)
+└── DATA → GPIO 22 (Pin 15)
+
+Relay Board (4-channel recommended):
+├── VCC → 5V (Pin 2)
+├── GND → Ground (Pin 6)
+├── IN1 → GPIO 18 (Pin 12) - Lights
+├── IN2 → GPIO 24 (Pin 18) - Pump
+├── IN3 → GPIO 25 (Pin 22) - Fan
+└── IN4 → GPIO 8 (Pin 24) - Heater
+
+PWM Fan Control:
+├── PWM Signal → GPIO 12 (Pin 32)
+├── +12V → External 12V supply
+└── GND → Common ground
+```
+
+**Safety Considerations:**
+- **Use optoisolated relays** for AC devices (lights, pumps)
+- **Separate power supplies** for high-current devices
+- **Fuses and circuit breakers** for all AC circuits
+- **Waterproof enclosures** for greenhouse environments
+- **Ground all metal components** properly
+
+### 🔌 **General Hardware**
+
 - **GPIO Compatibility**: Uses BCM GPIO pin numbering for Raspberry Pi
 - **Development-Friendly**: Includes comprehensive mock implementations for development without RPi hardware
 - **Sensor Requirements**: 
@@ -504,6 +816,97 @@ requests.post(url, json=data)
 This modular approach improves scalability, simplifies wiring, and allows each zone to operate semi-independently. Perfect for greenhouse automation, barn monitoring, coop control, and more.
 
 ## Troubleshooting
+
+### 🍓 **Raspberry Pi Specific Issues**
+
+**I2C Sensor Problems:**
+```bash
+# Check if I2C is enabled
+sudo raspi-config  # Interface Options > I2C > Enable
+
+# Verify I2C devices are detected
+sudo i2cdetect -y 1
+
+# Install I2C tools if missing
+sudo apt install -y i2c-tools
+
+# Check sensor connections (common addresses):
+# BH1750: 0x23 or 0x5C
+# TSL2591: 0x29
+# TCS34725: 0x29
+```
+
+**GPIO Permission Issues:**
+```bash
+# Add user to gpio group
+sudo usermod -a -G gpio pi
+
+# Check GPIO permissions
+ls -la /dev/gpiomem
+
+# Reboot if needed
+sudo reboot
+```
+
+**Service Won't Start:**
+```bash
+# Check service status
+sudo systemctl status greenhouse.service
+
+# View detailed logs
+sudo journalctl -u greenhouse.service --since today
+
+# Check Python environment
+/home/pi/greenhouse-control-system/venv/bin/python --version
+
+# Test manual start
+cd /home/pi/greenhouse-control-system
+source venv/bin/activate
+python web_app.py
+```
+
+**Memory Issues (Pi 3B+ or lower):**
+```bash
+# Increase swap space
+sudo dphys-swapfile swapoff
+sudo nano /etc/dphys-swapfile
+# Set CONF_SWAPSIZE=1024
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+
+# Monitor memory usage
+free -h
+htop
+```
+
+**Network Connectivity:**
+```bash
+# Check Wi-Fi status
+iwconfig
+
+# Configure static IP (optional)
+sudo nano /etc/dhcpcd.conf
+# Add:
+# interface wlan0
+# static ip_address=192.168.1.100/24
+# static routers=192.168.1.1
+# static domain_name_servers=8.8.8.8
+
+# Restart networking
+sudo systemctl restart dhcpcd
+```
+
+**Power Supply Issues:**
+```bash
+# Check for under-voltage warnings
+dmesg | grep voltage
+
+# Monitor power supply
+vcgencmd get_throttled
+# 0x0 = OK, anything else indicates issues
+
+# Use official Pi power supply (5V 3A for Pi 4)
+```
 
 ### 🔧 **System Issues**
 
