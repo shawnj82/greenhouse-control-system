@@ -1,80 +1,60 @@
 {
   "grid_size": {
-    "rows": 24,
-    "cols": 12
+    "cols": 12,
+    "rows": 24
   },
   "zones": {
-    "A1": {
+    "0-0": {
       "crop_type": "lettuce",
+      "custom_crop": "",
+      "stage": "seedling",
+      "planted_date": "",
+      "water_needs": 2,
+      "light_hours": 16,
+      "temp_min": 18,
+      "temp_max": 24,
+      "notes": "",
       "dli_config": {
-        "evening_end_time": "20:00",
+        "target_dli": 14,
         "morning_start_time": "06:00",
-        "priority": "medium",
-        "target_dli": 14
+        "evening_end_time": "20:00",
+        "priority": "medium"
       },
-      "growth_stage": "vegetative",
       "light_spectrum": {
-        "blue_percent": 25,
-        "color_temperature": 4000,
-        "green_percent": 40,
-        "par_target": 180,
-        "red_percent": 35
-      },
-      "name": "Lettuce Section"
-    },
-    "A2": {
-      "crop_type": "basil",
-      "dli_config": {
-        "evening_end_time": "21:00",
-        "morning_start_time": "05:00",
-        "priority": "high",
-        "target_dli": 18
-      },
-      "growth_stage": "flowering",
-      "light_spectrum": {
-        "blue_percent": 30,
-        "color_temperature": 4500,
-        "green_percent": 30,
-        "par_target": 220,
-        "red_percent": 40
-      },
-      "name": "Basil Garden"
-    },
-    "B1": {
-      "crop_type": "tomatoes",
-      "dli_config": {
-        "evening_end_time": "21:00",
-        "morning_start_time": "07:00",
-        "priority": "high",
-        "target_dli": 12
-      },
-      "growth_stage": "seedling",
-      "light_spectrum": {
+        "red_percent": 35,
         "blue_percent": 35,
-        "color_temperature": 3800,
-        "green_percent": 30,
-        "par_target": 150,
-        "red_percent": 35
+        "white_percent": 30,
+        "par_target": 150
       },
-      "name": "Tomato Seedlings"
+      "color_temp_schedule": {
+        "enabled": false
+      }
     },
-    "B2": {
-      "crop_type": "herbs",
+    "0-1": {
+      "crop_type": "tomato",
+      "custom_crop": "",
+      "stage": "seedling",
+      "planted_date": "",
+      "water_needs": 2,
+      "light_hours": 18,
+      "temp_min": 18,
+      "temp_max": 24,
+      "notes": "",
       "dli_config": {
-        "evening_end_time": "19:00",
-        "morning_start_time": "07:00",
-        "priority": "medium",
-        "target_dli": 12
+        "target_dli": 20,
+        "morning_start_time": "06:00",
+        "evening_end_time": "21:00",
+        "priority": "high"
       },
-      "growth_stage": "vegetative",
       "light_spectrum": {
-        "blue_percent": 28,
-        "color_temperature": 4200,
-        "green_percent": 40,
-        "par_target": 160,
-        "red_percent": 32
+        "red_percent": 35,
+        "blue_percent": 35,
+        "white_percent": 30,
+        "par_target": 200
       },
-      "name": "Mixed Herbs"
+      "color_temp_schedule": {
+        "enabled": false
+      }
     }
   }
 }

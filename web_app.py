@@ -29,6 +29,7 @@ TODOS_FILE = os.path.join(DATA_DIR, "todos.json")
 LIGHTS_FILE = os.path.join(DATA_DIR, "lights.json")
 LIGHT_SENSORS_FILE = os.path.join(DATA_DIR, "light_sensors.json")
 CALIBRATION_FILE = os.path.join(DATA_DIR, "light_calibration.json")
+COLOR_TEMP_PROFILES_FILE = os.path.join(DATA_DIR, "color_temperature_profiles.json")
 
 # Initialize hardware (with fallbacks)
 dht = DHT22(pin=4)
@@ -928,6 +929,94 @@ def update_growth_schedules():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/color-temp-profiles')
+def api_color_temp_profiles():
+    """API for color temperature profiles."""
+    profiles = load_json_file(COLOR_TEMP_PROFILES_FILE, {"profiles": {}, "plant_type_mapping": {}})
+    return jsonify(profiles)
+
+@app.route('/api/color-temp-schedule/<zone_id>')
+def api_get_color_temp_schedule(zone_id):
+    """Get current color temperature schedule for a zone."""
+    zones = load_json_file(ZONES_FILE, {"zones": {}})
+    zone = zones.get("zones", {}).get(zone_id)
+    if not zone:
+        return jsonify({"error": "Zone not found"}), 404
+    
+    schedule = zone.get("color_temp_schedule", {})
+    return jsonify(schedule)
+
+@app.route('/api/color-temp-schedule/<zone_id>', methods=['POST'])
+def api_update_color_temp_schedule(zone_id):
+    """Update color temperature schedule for a zone."""
+    try:
+        zones = load_json_file(ZONES_FILE, {"zones": {}})
+        if zone_id not in zones.get("zones", {}):
+            return jsonify({"error": "Zone not found"}), 404
+        
+        schedule_data = request.get_json()
+        zones["zones"][zone_id]["color_temp_schedule"] = schedule_data
+        
+        if save_json_file(ZONES_FILE, zones):
+            return jsonify({"success": True})
+        else:
+            return jsonify({"error": "Failed to save schedule"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/current-color-temp/<zone_id>')
+def api_current_color_temp(zone_id):
+    """Get the current color temperature for a zone based on time of day."""
+    try:
+        from datetime import datetime
+        
+        zones = load_json_file(ZONES_FILE, {"zones": {}})
+        zone = zones.get("zones", {}).get(zone_id)
+        if not zone:
+            return jsonify({"error": "Zone not found"}), 404
+        
+        schedule = zone.get("color_temp_schedule", {})
+        if not schedule.get("enabled", False):
+            # Return static color temperature
+            return jsonify({
+                "color_temp_k": zone.get("light_spectrum", {}).get("color_temperature", 4000),
+                "source": "static"
+            })
+        
+        current_time = datetime.now().time()
+        schedule_times = schedule.get("schedule", {})
+        
+        # Find the appropriate color temperature based on current time
+        morning_time = datetime.strptime(schedule_times.get("morning", {}).get("time", "06:00"), "%H:%M").time()
+        midday_time = datetime.strptime(schedule_times.get("midday", {}).get("time", "12:00"), "%H:%M").time()
+        afternoon_time = datetime.strptime(schedule_times.get("afternoon", {}).get("time", "18:00"), "%H:%M").time()
+        
+        if current_time < morning_time:
+            # Before morning - use afternoon setting
+            color_temp = schedule_times.get("afternoon", {}).get("color_temp_k", 3000)
+            period = "pre-morning"
+        elif current_time < midday_time:
+            # Morning period
+            color_temp = schedule_times.get("morning", {}).get("color_temp_k", 5000)
+            period = "morning"
+        elif current_time < afternoon_time:
+            # Midday period
+            color_temp = schedule_times.get("midday", {}).get("color_temp_k", 4000)
+            period = "midday"
+        else:
+            # Afternoon/evening period
+            color_temp = schedule_times.get("afternoon", {}).get("color_temp_k", 3000)
+            period = "afternoon"
+        
+        return jsonify({
+            "color_temp_k": color_temp,
+            "period": period,
+            "source": "scheduled"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '5000'))

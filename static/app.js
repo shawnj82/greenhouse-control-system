@@ -229,13 +229,18 @@ function renderGrid(editable = false) {
         for (let col = 0; col < gridSize.cols; col++) {
             const cell = document.createElement('div');
             const key = `${row}-${col}`;
+            
             cell.className = 'grid-cell';
+            if (editable) {
+                cell.className += ' editable';
+            }
             const zone = currentZones.zones && currentZones.zones[key];
             if (zone) {
                 cell.className += ' planted';
                 let stageLine = '';
-                if (zone.stage) {
-                    stageLine = `<span class="zone-stage-badge">${zone.stage.charAt(0).toUpperCase() + zone.stage.slice(1)}</span><br>`;
+                if (zone.stage || zone.growth_stage) {
+                    const stage = zone.stage || zone.growth_stage;
+                    stageLine = `<span class="zone-stage-badge">${stage.charAt(0).toUpperCase() + stage.slice(1)}</span><br>`;
                 }
                 cell.innerHTML = `
                     <div style="font-size: 0.7rem;">
@@ -255,6 +260,15 @@ function renderGrid(editable = false) {
             } else {
                 cell.innerHTML = `<span style="color: #999;">${row + 1},${col + 1}</span>`;
             }
+            
+            // Add click event listener for editable grids
+            if (editable) {
+                cell.addEventListener('click', function() {
+                    selectZone(key, cell);
+                });
+                cell.style.cursor = 'pointer';
+            }
+            
             container.appendChild(cell);
             cellCount++;
         }
@@ -684,18 +698,51 @@ function toggleLight(lightId, light) {
 
 // Zone configuration functions (for zones.html)
 function selectZone(key, cellElement) {
-    // Select single cell (single-select mode)
-    cellElement.classList.add('selected');
-    selectedZoneKey = key;
-    selectedZoneKeys.add(key);
+    if (!multiSelectMode) {
+        // Single select mode - clear previous selections
+        clearSelection();
+        cellElement.classList.add('selected');
+        selectedZoneKey = key;
+        selectedZoneKeys.clear();
+        selectedZoneKeys.add(key);
+    } else {
+        // Multi-select mode - toggle selection
+        if (selectedZoneKeys.has(key)) {
+            selectedZoneKeys.delete(key);
+            cellElement.classList.remove('selected');
+            if (selectedZoneKey === key) {
+                selectedZoneKey = null;
+            }
+        } else {
+            selectedZoneKeys.add(key);
+            cellElement.classList.add('selected');
+            if (!selectedZoneKey) {
+                selectedZoneKey = key; // Set first selection as primary
+            }
+        }
+    }
     
-    // Show zone details panel
+    // Show/hide zone details panel based on selection
     const detailsPanel = document.getElementById('zoneDetails');
     if (detailsPanel) {
-        detailsPanel.style.display = 'block';
-        updateSelectionHeader();
-        loadZoneFormForKey(key);
+        if (selectedZoneKeys.size > 0) {
+            detailsPanel.style.display = 'block';
+            updateSelectionHeader();
+            loadZoneFormForKey(selectedZoneKey || Array.from(selectedZoneKeys)[0]);
+        } else {
+            detailsPanel.style.display = 'none';
+        }
     }
+}
+
+function clearSelection() {
+    // Remove selected class from all cells
+    const gridCells = document.querySelectorAll('.grid-cell.selected');
+    gridCells.forEach(cell => cell.classList.remove('selected'));
+    
+    // Clear selection state
+    selectedZoneKeys.clear();
+    selectedZoneKey = null;
 }
 
 function applyZoneConfig() {
@@ -714,31 +761,48 @@ function applyZoneConfig() {
     if (!currentZones.zones) {
         currentZones.zones = {};
     }
-    
-    // Zone configuration to apply
-    const zoneConfig = {
-        crop_type: cropType === 'custom' ? customCrop : cropType,
-        custom_crop: customCrop,
-        stage: document.getElementById('cropStage')?.value || '',
-        planted_date: plantedDate,
-        water_needs: parseInt(document.getElementById('waterNeeds').value) || 2,
-        light_hours: parseInt(document.getElementById('lightHours').value) || 12,
-        temp_min: parseInt(document.getElementById('tempMin').value) || 18,
-        temp_max: parseInt(document.getElementById('tempMax').value) || 24,
-        notes: document.getElementById('notes').value,
-        light_spectrum: {
-            red_percent: parseInt(document.getElementById('redPercent').value) || 35,
-            blue_percent: parseInt(document.getElementById('bluePercent').value) || 25,
-            white_percent: parseInt(document.getElementById('whitePercent').value) || 40,
-            par_target: parseInt(document.getElementById('parTarget').value) || 200
-        }
-    };
 
     // Determine targets
     const targets = selectedZoneKeys.size > 0 ? Array.from(selectedZoneKeys) : (selectedZoneKey ? [selectedZoneKey] : []);
-    targets.forEach(k => {
-        currentZones.zones[k] = { ...zoneConfig };
-    });
+    
+    // Handle empty zones - clear the zone data
+    if (cropType === 'empty') {
+        targets.forEach(k => {
+            delete currentZones.zones[k];
+        });
+        showNotification(`Cleared ${targets.length} zone(s)`, 'success');
+    } else {
+        // Zone configuration to apply
+        const zoneConfig = {
+            crop_type: cropType === 'custom' ? customCrop : cropType,
+            custom_crop: customCrop,
+            stage: document.getElementById('cropStage')?.value || '',
+            planted_date: plantedDate,
+            water_needs: parseInt(document.getElementById('waterNeeds').value) || 2,
+            light_hours: parseInt(document.getElementById('lightHours').value) || 12,
+            temp_min: parseInt(document.getElementById('tempMin').value) || 18,
+            temp_max: parseInt(document.getElementById('tempMax').value) || 24,
+            notes: document.getElementById('notes').value,
+            dli_config: {
+                target_dli: parseFloat(document.getElementById('targetDli').value) || 14,
+                morning_start_time: document.getElementById('morningStartTime').value || '06:00',
+                evening_end_time: document.getElementById('eveningEndTime').value || '20:00',
+                priority: document.getElementById('lightPriority').value || 'medium'
+            },
+            light_spectrum: {
+                red_percent: parseInt(document.getElementById('redPercent').value) || 35,
+                blue_percent: parseInt(document.getElementById('bluePercent').value) || 25,
+                white_percent: parseInt(document.getElementById('whitePercent').value) || 40,
+                par_target: parseInt(document.getElementById('parTarget').value) || 200
+            },
+            color_temp_schedule: getCurrentColorTempSchedule()
+        };
+
+        targets.forEach(k => {
+            currentZones.zones[k] = { ...zoneConfig };
+        });
+        showNotification(`Zone configuration applied to ${targets.length} cell(s)`, 'success');
+    }
 
     // Re-render grid
     renderGrid(true);
@@ -747,7 +811,6 @@ function applyZoneConfig() {
     } else {
         updateSelectionHeader();
     }
-    showNotification(`Zone configuration applied to ${targets.length} cell(s)`, 'success');
 }
 
 function clearZone() {
@@ -896,6 +959,16 @@ function loadZoneFormForKey(key) {
         document.getElementById('bluePercent').value = ls.blue_percent ?? 25;
         document.getElementById('whitePercent').value = ls.white_percent ?? 40;
         document.getElementById('parTarget').value = ls.par_target ?? 200;
+        
+        // Load DLI configuration
+        const dli = zone.dli_config || {};
+        document.getElementById('targetDli').value = dli.target_dli ?? 14;
+        document.getElementById('morningStartTime').value = dli.morning_start_time || '06:00';
+        document.getElementById('eveningEndTime').value = dli.evening_end_time || '20:00';
+        document.getElementById('lightPriority').value = dli.priority || 'medium';
+        
+        // Load color temperature schedule
+        setColorTempSchedule(zone.color_temp_schedule);
     } else {
         // Reset to defaults
         const form = document.getElementById('zoneForm');
@@ -904,6 +977,15 @@ function loadZoneFormForKey(key) {
         document.getElementById('bluePercent').value = 25;
         document.getElementById('whitePercent').value = 40;
         document.getElementById('parTarget').value = 200;
+        
+        // Reset DLI configuration to defaults
+        document.getElementById('targetDli').value = 14;
+        document.getElementById('morningStartTime').value = '06:00';
+        document.getElementById('eveningEndTime').value = '20:00';
+        document.getElementById('lightPriority').value = 'medium';
+        
+        // Reset color temperature schedule
+        setColorTempSchedule({ enabled: false });
     }
     updateSpectrumTotal();
 }
@@ -1316,4 +1398,141 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Zones are always shown; no toggle handler needed
+});
+
+// Color temperature scheduling functions
+let colorTempProfiles = {};
+
+// Load color temperature profiles
+async function loadColorTempProfiles() {
+    try {
+        const response = await fetch('/api/color-temp-profiles');
+        if (response.ok) {
+            colorTempProfiles = await response.json();
+        } else {
+            console.error('Failed to load color temperature profiles');
+        }
+    } catch (error) {
+        console.error('Error loading color temperature profiles:', error);
+    }
+}
+
+// Toggle color temperature schedule visibility
+function toggleColorTempSchedule() {
+    const checkbox = document.getElementById('enableColorTempSchedule');
+    const details = document.getElementById('colorTempScheduleDetails');
+    
+    if (checkbox && details) {
+        details.style.display = checkbox.checked ? 'block' : 'none';
+    }
+}
+
+// Handle plant type profile selection
+function handlePlantTypeProfileChange() {
+    const profileSelect = document.getElementById('plantTypeProfile');
+    const profile = profileSelect.value;
+    
+    if (profile && profile !== 'custom' && colorTempProfiles.profiles && colorTempProfiles.profiles[profile]) {
+        const profileData = colorTempProfiles.profiles[profile];
+        
+        // Update the time and color temperature inputs
+        document.getElementById('morningTime').value = profileData.schedule.morning.time;
+        document.getElementById('morningColorTemp').value = profileData.schedule.morning.color_temp_k;
+        
+        document.getElementById('middayTime').value = profileData.schedule.midday.time;
+        document.getElementById('middayColorTemp').value = profileData.schedule.midday.color_temp_k;
+        
+        document.getElementById('afternoonTime').value = profileData.schedule.afternoon.time;
+        document.getElementById('afternoonColorTemp').value = profileData.schedule.afternoon.color_temp_k;
+    }
+}
+
+// Get current color temperature schedule from form
+function getCurrentColorTempSchedule() {
+    const enabled = document.getElementById('enableColorTempSchedule').checked;
+    
+    if (!enabled) {
+        return { enabled: false };
+    }
+    
+    return {
+        enabled: true,
+        profile: document.getElementById('plantTypeProfile').value,
+        schedule: {
+            morning: {
+                time: document.getElementById('morningTime').value,
+                color_temp_k: parseInt(document.getElementById('morningColorTemp').value)
+            },
+            midday: {
+                time: document.getElementById('middayTime').value,
+                color_temp_k: parseInt(document.getElementById('middayColorTemp').value)
+            },
+            afternoon: {
+                time: document.getElementById('afternoonTime').value,
+                color_temp_k: parseInt(document.getElementById('afternoonColorTemp').value)
+            }
+        }
+    };
+}
+
+// Set color temperature schedule in form
+function setColorTempSchedule(schedule) {
+    const enableCheckbox = document.getElementById('enableColorTempSchedule');
+    const details = document.getElementById('colorTempScheduleDetails');
+    
+    if (schedule && schedule.enabled) {
+        enableCheckbox.checked = true;
+        details.style.display = 'block';
+        
+        if (schedule.profile) {
+            document.getElementById('plantTypeProfile').value = schedule.profile;
+        }
+        
+        if (schedule.schedule) {
+            if (schedule.schedule.morning) {
+                document.getElementById('morningTime').value = schedule.schedule.morning.time || '06:00';
+                document.getElementById('morningColorTemp').value = schedule.schedule.morning.color_temp_k || 5000;
+            }
+            if (schedule.schedule.midday) {
+                document.getElementById('middayTime').value = schedule.schedule.midday.time || '12:00';
+                document.getElementById('middayColorTemp').value = schedule.schedule.midday.color_temp_k || 4000;
+            }
+            if (schedule.schedule.afternoon) {
+                document.getElementById('afternoonTime').value = schedule.schedule.afternoon.time || '18:00';
+                document.getElementById('afternoonColorTemp').value = schedule.schedule.afternoon.color_temp_k || 3000;
+            }
+        }
+    } else {
+        enableCheckbox.checked = false;
+        details.style.display = 'none';
+    }
+}
+
+// Initialize color temperature controls
+function initColorTempControls() {
+    // Load profiles first
+    loadColorTempProfiles();
+    
+    // Add event listeners
+    const enableCheckbox = document.getElementById('enableColorTempSchedule');
+    const profileSelect = document.getElementById('plantTypeProfile');
+    
+    if (enableCheckbox) {
+        enableCheckbox.addEventListener('change', toggleColorTempSchedule);
+    }
+    
+    if (profileSelect) {
+        profileSelect.addEventListener('change', handlePlantTypeProfileChange);
+    }
+    
+    // Initial toggle state
+    toggleColorTempSchedule();
+}
+
+// Call initialization when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize color temperature controls if on zones page
+    if (window.location.pathname === '/zones') {
+        setTimeout(initColorTempControls, 100); // Small delay to ensure other DOM elements are ready
+    }
 });

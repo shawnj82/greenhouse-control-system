@@ -54,6 +54,7 @@
                     <label for="cropType">Crop Type:</label>
                     <select id="cropType">
                         <option value="">-- Select Crop --</option>
+                        <option value="empty">Empty (no crop)</option>
                         <option value="lettuce">Lettuce</option>
                         <option value="tomato">Tomato</option>
                         <option value="basil">Basil</option>
@@ -97,6 +98,34 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Daily Light Integral (DLI) Configuration:</label>
+                    <div class="dli-controls">
+                        <div class="dli-input">
+                            <label for="targetDli">Target DLI (mol/m²/day):</label>
+                            <input type="number" id="targetDli" min="5" max="50" value="14" step="0.5">
+                            <small>Typical ranges: Leafy greens 12-17, Herbs 14-20, Fruiting plants 20-30</small>
+                        </div>
+                        <div class="dli-input">
+                            <label for="morningStartTime">Morning Start Time:</label>
+                            <input type="time" id="morningStartTime" value="06:00">
+                        </div>
+                        <div class="dli-input">
+                            <label for="eveningEndTime">Evening End Time:</label>
+                            <input type="time" id="eveningEndTime" value="20:00">
+                        </div>
+                        <div class="dli-input">
+                            <label for="lightPriority">Light Priority:</label>
+                            <select id="lightPriority">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                            <small>Higher priority zones get preferred access to lighting resources</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label for="tempRange">Temperature Range (°C):</label>
                     <input type="number" id="tempMin" placeholder="Min" value="18"> - 
                     <input type="number" id="tempMax" placeholder="Max" value="24">
@@ -128,6 +157,61 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Color Temperature Schedule:</label>
+                    <div class="color-temp-controls">
+                        <div class="form-check">
+                            <input type="checkbox" id="enableColorTempSchedule" class="form-check-input">
+                            <label for="enableColorTempSchedule" class="form-check-label">Enable daily color temperature scheduling</label>
+                        </div>
+                        
+                        <div id="colorTempScheduleDetails" style="display: none; margin-top: 1rem;">
+                            <div class="form-group">
+                                <label for="plantTypeProfile">Plant Type Profile:</label>
+                                <select id="plantTypeProfile">
+                                    <option value="custom">Custom Schedule</option>
+                                    <option value="leafy_greens">Leafy Greens (Lettuce, Spinach, Kale)</option>
+                                    <option value="herbs">Herbs (Basil, Cilantro, Parsley)</option>
+                                    <option value="fruiting_plants">Fruiting Plants (Tomato, Pepper, Cucumber)</option>
+                                    <option value="seedlings">Seedlings & Young Plants</option>
+                                    <option value="microgreens">Microgreens</option>
+                                </select>
+                            </div>
+                            
+                            <div class="schedule-times">
+                                <h4>Daily Schedule:</h4>
+                                <div class="time-period">
+                                    <label>Morning (Cool blue-white light):</label>
+                                    <input type="time" id="morningTime" value="06:00">
+                                    <input type="number" id="morningColorTemp" min="2700" max="6500" value="5000" placeholder="Color temp (K)">
+                                    <span class="temp-label">K</span>
+                                </div>
+                                <div class="time-period">
+                                    <label>Midday (Balanced white light):</label>
+                                    <input type="time" id="middayTime" value="12:00">
+                                    <input type="number" id="middayColorTemp" min="2700" max="6500" value="4000" placeholder="Color temp (K)">
+                                    <span class="temp-label">K</span>
+                                </div>
+                                <div class="time-period">
+                                    <label>Afternoon (Warm red light):</label>
+                                    <input type="time" id="afternoonTime" value="18:00">
+                                    <input type="number" id="afternoonColorTemp" min="2700" max="6500" value="3000" placeholder="Color temp (K)">
+                                    <span class="temp-label">K</span>
+                                </div>
+                            </div>
+                            
+                            <div class="color-temp-info">
+                                <small>
+                                    <strong>Color Temperature Guide:</strong><br>
+                                    • 6500K - Cool blue-white (promotes vegetative growth)<br>
+                                    • 4000K - Neutral white (balanced growth)<br>
+                                    • 3000K - Warm white (encourages flowering/fruiting)
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label for="notes">Notes:</label>
                     <textarea id="notes" rows="3" placeholder="Special care instructions..."></textarea>
                 </div>
@@ -143,6 +227,9 @@
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script>
+        // Load zones data from server
+        currentZones = {{ zones|tojson }};
+        
         // Only set selectedZoneKey and run DOMContentLoaded logic, do not redeclare currentZones
         let selectedZoneKey = null;
 

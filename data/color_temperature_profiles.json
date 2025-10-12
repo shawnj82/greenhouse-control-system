@@ -1,0 +1,149 @@
+{
+  "profiles": {
+    "leafy_greens": {
+      "name": "Leafy Greens (Lettuce, Spinach, Kale)",
+      "description": "Optimized for photosynthesis and compact growth",
+      "schedule": {
+        "morning": {
+          "time": "06:00",
+          "color_temp_k": 6500,
+          "description": "Cool blue light stimulates photosynthesis"
+        },
+        "midday": {
+          "time": "12:00", 
+          "color_temp_k": 4000,
+          "description": "Balanced full spectrum for peak growth"
+        },
+        "afternoon": {
+          "time": "16:00",
+          "color_temp_k": 3000,
+          "description": "Warm light for stress reduction"
+        }
+      }
+    },
+    "herbs": {
+      "name": "Culinary Herbs (Basil, Cilantro, Parsley)",
+      "description": "Enhanced for essential oil production and flavor",
+      "schedule": {
+        "morning": {
+          "time": "05:00",
+          "color_temp_k": 6000,
+          "description": "Cool light for vigorous growth"
+        },
+        "midday": {
+          "time": "12:00",
+          "color_temp_k": 4200,
+          "description": "Balanced spectrum for oil production"
+        },
+        "afternoon": {
+          "time": "17:00",
+          "color_temp_k": 3200,
+          "description": "Warm light for flavor development"
+        }
+      }
+    },
+    "fruiting_plants": {
+      "name": "Fruiting Plants (Tomatoes, Peppers, Cucumbers)",
+      "description": "Supports flowering and fruit development",
+      "schedule": {
+        "morning": {
+          "time": "06:30",
+          "color_temp_k": 5500,
+          "description": "Moderate blue for leaf development"
+        },
+        "midday": {
+          "time": "12:30",
+          "color_temp_k": 3800,
+          "description": "Warm spectrum for flowering"
+        },
+        "afternoon": {
+          "time": "17:30",
+          "color_temp_k": 2700,
+          "description": "Red-rich light for fruit ripening"
+        }
+      }
+    },
+    "seedlings": {
+      "name": "Seedlings & Young Plants",
+      "description": "Gentle light for early development",
+      "schedule": {
+        "morning": {
+          "time": "07:00",
+          "color_temp_k": 5000,
+          "description": "Soft blue light for germination"
+        },
+        "midday": {
+          "time": "12:00",
+          "color_temp_k": 4500,
+          "description": "Balanced growth spectrum"
+        },
+        "afternoon": {
+          "time": "16:00",
+          "color_temp_k": 3500,
+          "description": "Warm light for root development"
+        }
+      }
+    },
+    "microgreens": {
+      "name": "Microgreens & Sprouts",
+      "description": "High-intensity light for rapid growth",
+      "schedule": {
+        "morning": {
+          "time": "06:00",
+          "color_temp_k": 6500,
+          "description": "Cool intense light for fast growth"
+        },
+        "midday": {
+          "time": "11:00",
+          "color_temp_k": 5000,
+          "description": "High-energy spectrum"
+        },
+        "afternoon": {
+          "time": "15:00",
+          "color_temp_k": 4000,
+          "description": "Moderate warm light"
+        }
+      }
+    },
+    "custom": {
+      "name": "Custom Schedule",
+      "description": "User-defined color temperature schedule",
+      "schedule": {
+        "morning": {
+          "time": "06:00",
+          "color_temp_k": 5000,
+          "description": "Custom morning setting"
+        },
+        "midday": {
+          "time": "12:00",
+          "color_temp_k": 4000,
+          "description": "Custom midday setting"
+        },
+        "afternoon": {
+          "time": "18:00",
+          "color_temp_k": 3000,
+          "description": "Custom afternoon setting"
+        }
+      }
+    }
+  },
+  "plant_type_mapping": {
+    "lettuce": "leafy_greens",
+    "spinach": "leafy_greens", 
+    "kale": "leafy_greens",
+    "arugula": "leafy_greens",
+    "basil": "herbs",
+    "cilantro": "herbs",
+    "parsley": "herbs",
+    "oregano": "herbs",
+    "thyme": "herbs",
+    "rosemary": "herbs",
+    "tomatoes": "fruiting_plants",
+    "peppers": "fruiting_plants",
+    "cucumbers": "fruiting_plants",
+    "eggplant": "fruiting_plants",
+    "seedlings": "seedlings",
+    "microgreens": "microgreens",
+    "herbs": "herbs"
+  }
+}
