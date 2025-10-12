@@ -210,6 +210,9 @@ source venv/bin/activate
 
 # Install Python dependencies for Raspberry Pi
 pip install -r requirements.txt
+
+# If you get version errors (e.g., smbus2==0.4.4 not found), update to latest:
+pip install --upgrade smbus2 RPi.GPIO Flask numpy scipy
 ```
 
 #### 4. Hardware Setup
@@ -818,6 +821,21 @@ This modular approach improves scalability, simplifies wiring, and allows each z
 ## Troubleshooting
 
 ### 🍓 **Raspberry Pi Specific Issues**
+
+**Python Package Installation Errors:**
+```bash
+# If you get "No matching distribution found" errors:
+pip install --upgrade pip setuptools wheel
+
+# Update individual packages to latest versions:
+pip install --upgrade smbus2 RPi.GPIO Flask numpy scipy
+
+# Force reinstall if needed:
+pip install --force-reinstall --no-cache-dir smbus2
+
+# Alternative: Install without version constraints:
+pip install Adafruit_DHT RPi.GPIO smbus2 pyserial Flask numpy scipy
+```
 
 **I2C Sensor Problems:**
 ```bash

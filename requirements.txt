@@ -1,6 +1,6 @@
 Adafruit_DHT==1.4.0
 RPi.GPIO==0.7.0
-smbus2==0.4.4
+smbus2>=0.4.3
 pyserial==3.5
 Flask==2.3.3
 numpy>=2.3.3
