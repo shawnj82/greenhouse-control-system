@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Light Control - Crane Creek Sensors</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .decision-card {
+            border-left: 4px solid #007bff;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            transition: all 0.3s ease;
+        }
+        .decision-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,123,255,0.1);
+        }
+        .confidence-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+            transition: all 0.3s ease;
+        }
+        .light-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        .light-on {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+        }
+        .light-off {
+            background: linear-gradient(45deg, #6c757d, #495057);
+            color: white;
+        }
+        .scenario-selector {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .energy-display {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            border-radius: 10px;
+            padding: 15px;
+            color: #333;
+        }
+        .reason-badge {
+            background: linear-gradient(45deg, #17a2b8, #138496);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            margin: 2px;
+        }
+        .dli-progress {
+            background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+            height: 20px;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        .dli-progress-bar {
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+        .dli-card {
+            border-left: 4px solid #28a745;
+            transition: all 0.3s ease;
+        }
+        .dli-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.1);
+        }
+        .dli-exceeded {
+            border-left-color: #dc3545;
+        }
+        .dli-warning {
+            border-left-color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="fas fa-brain text-primary"></i>
+                    Intelligent Light Control Dashboard
+                </h1>
+            </div>
+        </div>
+
+        <!-- Scenario Selector -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="scenario-selector">
+                    <h3><i class="fas fa-clock"></i> Scenario Selector</h3>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="scenarioSelect" class="form-label">Choose Scenario:</label>
+                            <select class="form-select" id="scenarioSelect" onchange="updateScenario()">
+                                <option value="morning">🌅 Morning Startup (6:00 AM)</option>
+                                <option value="midday">☀️ Sunny Midday (12:00 PM)</option>
+                                <option value="afternoon" selected>🌤️ Cloudy Afternoon (3:00 PM)</option>
+                                <option value="evening">🌆 Evening Peak Growth (6:00 PM)</option>
+                                <option value="night">🌙 Night Rest Period (10:00 PM)</option>
+                                <option value="peak_energy">⚡ Peak Energy Rates (7:00 PM)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Simulate Real-Time:</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoUpdate">
+                                <label class="form-check-label" for="autoUpdate">
+                                    Auto-refresh every 10 seconds
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-light btn-lg" onclick="makeDecisions()">
+                                <i class="fas fa-sync-alt"></i> Make Decisions
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Decision Summary -->
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <h4 id="lightsOn">-</h4>
+                        <p>Lights ON</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <h4 id="totalPower">-</h4>
+                        <p>Total Power (W)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <h4 id="avgConfidence">-</h4>
+                        <p>Avg Confidence</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="energy-display text-center">
+                    <h4 id="energyCost">-</h4>
+                    <p>Energy Cost/Hour</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body text-center">
+                        <h4 id="avgDLI">-</h4>
+                        <p>Avg DLI Progress</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DLI Status -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-sun"></i> Daily Light Integral (DLI) Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="dliStatus" class="row">
+                            <!-- DLI status cards will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Individual Light Decisions -->
+        <div class="row">
+            <div class="col-12">
+                <h3><i class="fas fa-lightbulb"></i> Individual Light Decisions</h3>
+                <div id="lightDecisions" class="row">
+                    <!-- Light decision cards will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Decision Factors Analysis -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-pie"></i> Decision Reasons Breakdown</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="reasonsChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-info-circle"></i> Current Conditions</h5>
+                    </div>
+                    <div class="card-body" id="conditionsDisplay">
+                        <!-- Current conditions will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        let autoUpdateInterval = null;
+        let reasonsChart = null;
+
+        function updateScenario() {
+            const scenario = document.getElementById('scenarioSelect').value;
+            makeDecisions();
+        }
+
+        function makeDecisions() {
+            const scenario = document.getElementById('scenarioSelect').value;
+            
+            // Call the API to make intelligent decisions
+            fetch('/api/lights/intelligent-control', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    scenario: scenario,
+                    current_time: new Date().toISOString()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateDisplay(data);
+            })
+            .catch(error => {
+                console.error('Error making decisions:', error);
+                showError('Failed to make intelligent light decisions');
+            });
+        }
+
+        function updateDisplay(data) {
+            // Update summary cards
+            const lightsOn = data.decisions.filter(d => d.should_be_on).length;
+            const totalLights = data.decisions.length;
+            const totalPower = data.decisions
+                .filter(d => d.should_be_on)
+                .reduce((sum, d) => sum + (d.power_consumption || 0), 0);
+            const avgConfidence = data.decisions
+                .reduce((sum, d) => sum + d.confidence, 0) / data.decisions.length;
+
+            document.getElementById('lightsOn').textContent = `${lightsOn}/${totalLights}`;
+            document.getElementById('totalPower').textContent = `${totalPower.toFixed(1)}W`;
+            document.getElementById('avgConfidence').textContent = `${(avgConfidence * 100).toFixed(0)}%`;
+            document.getElementById('energyCost').textContent = `$${data.energy_analysis.actual_cost.toFixed(3)}`;
+
+            // Update individual light decisions
+            updateLightDecisions(data.decisions);
+
+            // Update decision reasons chart
+            updateReasonsChart(data.decisions);
+
+            // Update current conditions
+            updateConditionsDisplay(data);
+            
+            // Fetch and update DLI status
+            updateDLIStatus();
+        }
+
+        function updateLightDecisions(decisions) {
+            const container = document.getElementById('lightDecisions');
+            container.innerHTML = '';
+
+            decisions.forEach(decision => {
+                const card = createLightDecisionCard(decision);
+                container.appendChild(card);
+            });
+        }
+
+        function createLightDecisionCard(decision) {
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 mb-3';
+
+            const status = decision.should_be_on ? 'ON' : 'OFF';
+            const statusClass = decision.should_be_on ? 'light-on' : 'light-off';
+            const intensity = decision.should_be_on ? ` (${(decision.intensity_percent || 100).toFixed(0)}%)` : '';
+            
+            const confidencePercent = (decision.confidence * 100).toFixed(0);
+            const confidenceWidth = decision.confidence * 100;
+
+            let factorsBadges = '';
+            if (decision.contributing_factors) {
+                factorsBadges = decision.contributing_factors.slice(0, 3).map(factor => 
+                    `<span class="reason-badge">${factor}</span>`
+                ).join('');
+            }
+
+            col.innerHTML = `
+                <div class="card decision-card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">${decision.light_name || decision.light_id}</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="light-status ${statusClass}">${status}${intensity}</span>
+                            <small class="text-muted">${decision.power_consumption || 0}W</small>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Confidence: ${confidencePercent}%</small>
+                            <div class="confidence-bar mt-1">
+                                <div style="width: ${confidenceWidth}%; height: 100%; background: rgba(40, 167, 69, 0.8); border-radius: 4px;"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted d-block mb-1">Key Factors:</small>
+                            ${factorsBadges}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return col;
+        }
+
+        function updateReasonsChart(decisions) {
+            const reasonCounts = {};
+            decisions.forEach(decision => {
+                const reason = decision.primary_reason.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+            });
+
+            const ctx = document.getElementById('reasonsChart').getContext('2d');
+            
+            if (reasonsChart) {
+                reasonsChart.destroy();
+            }
+
+            reasonsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(reasonCounts),
+                    datasets: [{
+                        data: Object.values(reasonCounts),
+                        backgroundColor: [
+                            '#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6c757d'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateConditionsDisplay(data) {
+            const container = document.getElementById('conditionsDisplay');
+            const conditions = data.current_conditions || {};
+            
+            container.innerHTML = `
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Time:</strong><br>
+                        <span class="text-muted">${conditions.time || 'Unknown'}</span>
+                    </div>
+                    <div class="col-6">
+                        <strong>Energy Rate:</strong><br>
+                        <span class="text-muted">${conditions.energy_multiplier || '1.0'}x</span>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <strong>Ambient Light:</strong><br>
+                        <span class="text-muted">${conditions.ambient_level || 'Unknown'}</span>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <strong>Total Cost:</strong><br>
+                        <span class="text-muted">$${data.energy_analysis.actual_cost.toFixed(3)}/hr</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show';
+            alert.innerHTML = `
+                <strong>Error:</strong> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.insertBefore(alert, document.body.firstChild);
+        }
+
+        // Auto-update functionality
+        document.getElementById('autoUpdate').addEventListener('change', function() {
+            if (this.checked) {
+                autoUpdateInterval = setInterval(makeDecisions, 10000);
+            } else {
+                if (autoUpdateInterval) {
+                    clearInterval(autoUpdateInterval);
+                    autoUpdateInterval = null;
+                }
+            }
+        });
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', function() {
+            makeDecisions();
+        });
+
+        function updateDLIStatus() {
+            fetch('/api/dli/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayDLIStatus(data.dli_status);
+                        updateAvgDLIProgress(data.dli_status);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching DLI status:', error);
+                });
+        }
+
+        function displayDLIStatus(dliStatus) {
+            const container = document.getElementById('dliStatus');
+            container.innerHTML = '';
+
+            for (const [zoneKey, status] of Object.entries(dliStatus)) {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-3 mb-3';
+
+                let cardClass = 'dli-card';
+                if (status.progress_percent > 110) {
+                    cardClass += ' dli-exceeded';
+                } else if (status.progress_percent < 70) {
+                    cardClass += ' dli-warning';
+                }
+
+                col.innerHTML = `
+                    <div class="card ${cardClass}">
+                        <div class="card-body">
+                            <h6 class="card-title">${zoneKey} - ${status.crop_type}</h6>
+                            <div class="mb-2">
+                                <small class="text-muted">DLI Progress: ${status.progress_percent.toFixed(0)}%</small>
+                                <div class="dli-progress mt-1">
+                                    <div class="dli-progress-bar" style="width: ${Math.min(100, status.progress_percent)}%"></div>
+                                </div>
+                            </div>
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <small class="text-muted">Current</small><br>
+                                    <strong>${status.current_dli.toFixed(1)}</strong>
+                                </div>
+                                <div class="col-6">
+                                    <small class="text-muted">Target</small><br>
+                                    <strong>${status.target_dli.toFixed(1)}</strong>
+                                </div>
+                            </div>
+                            <hr>
+                            <small class="text-muted">
+                                Remaining: ${status.remaining_dli.toFixed(1)} mol/m²<br>
+                                Light hours left: ${status.remaining_hours.toFixed(1)}h
+                            </small>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(col);
+            }
+        }
+
+        function updateAvgDLIProgress(dliStatus) {
+            const zones = Object.values(dliStatus);
+            if (zones.length > 0) {
+                const avgProgress = zones.reduce((sum, zone) => sum + zone.progress_percent, 0) / zones.length;
+                document.getElementById('avgDLI').textContent = `${avgProgress.toFixed(0)}%`;
+            } else {
+                document.getElementById('avgDLI').textContent = 'N/A';
+            }
+        }
+    </script>
+</body>
+</html>

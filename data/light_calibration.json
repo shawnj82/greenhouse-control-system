@@ -1,0 +1,7 @@
+{
+  "timestamp": "",
+  "baseline": {},
+  "light_effects": {},
+  "sensor_zones": {},
+  "calibration_notes": "This file stores the calibration data showing how each light affects each sensor. Run the calibration process to populate this data."
+}

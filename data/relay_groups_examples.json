@@ -1,0 +1,31 @@
+{
+  "relay_groups": {
+    "mixed_plants_group": {
+      "description": "Lettuce and flowering plants - conflicting needs",
+      "lights": ["light_lettuce_01", "light_flowers_01"],
+      "relay_pin": 18,
+      "power_total_watts": 150,
+      "control_type": "shared",
+      "cost_savings": 3.00,
+      "created_date": "2025-10-12T08:30:00Z"
+    },
+    "herbs_tomatoes_group": {
+      "description": "Herbs with flowering tomatoes - high conflict",
+      "lights": ["light_herbs_01", "light_tomatoes_01"],
+      "relay_pin": 19,
+      "power_total_watts": 200,
+      "control_type": "shared", 
+      "cost_savings": 3.00,
+      "created_date": "2025-10-12T08:30:00Z"
+    },
+    "compatible_group": {
+      "description": "Two lettuce beds - compatible",
+      "lights": ["light_lettuce_02", "light_lettuce_03"],
+      "relay_pin": 20,
+      "power_total_watts": 120,
+      "control_type": "shared",
+      "cost_savings": 3.00,
+      "created_date": "2025-10-12T08:30:00Z"
+    }
+  }
+}

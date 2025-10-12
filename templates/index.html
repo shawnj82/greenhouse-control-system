@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crane Creek Greenhouse</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>🌱 Crane Creek Greenhouse Control</h1>
+        <nav>
+            <a href="/" class="nav-link active">Dashboard</a>
+            <a href="/zones" class="nav-link">Zones</a>
+            <a href="/lights" class="nav-link">Lights</a>
+            <a href="/calibration" class="nav-link">Calibration</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Status Overview -->
+        <section class="status-overview">
+            <h2>Current Status</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>🌡️ Temperature</h3>
+                    <div class="status-value">
+                        {% if status.temperature_c %}
+                            {{ "%.1f"|format(status.temperature_c) }}°C
+                        {% else %}
+                            --
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="status-card">
+                    <h3>💧 Humidity</h3>
+                    <div class="status-value">
+                        {% if status.humidity %}
+                            {{ "%.1f"|format(status.humidity) }}%
+                        {% else %}
+                            --
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="status-card">
+                    <h3>☀️ Light</h3>
+                    <div class="status-value">
+                        {% if status.light_lux %}
+                            {{ "%.0f"|format(status.light_lux) }} lux
+                        {% else %}
+                            --
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="status-card">
+                    <h3>🌱 Soil</h3>
+                    <div class="status-value">
+                        {% if status.soil_moisture %}
+                            {{ "%.0f"|format(status.soil_moisture) }}%
+                        {% else %}
+                            --
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Device Controls -->
+        <section class="device-controls">
+            <h2>Device Controls</h2>
+            <div class="controls-grid">
+                <div class="control-card">
+                    <h3>💡 Grow Light</h3>
+                    <button onclick="controlDevice('grow_light', 'on')" class="btn btn-on">ON</button>
+                    <button onclick="controlDevice('grow_light', 'off')" class="btn btn-off">OFF</button>
+                </div>
+                <div class="control-card">
+                    <h3>🔥 Heater</h3>
+                    <button onclick="controlDevice('heater', 'on')" class="btn btn-on">ON</button>
+                    <button onclick="controlDevice('heater', 'off')" class="btn btn-off">OFF</button>
+                </div>
+                <div class="control-card">
+                    <h3>🌪️ Fan</h3>
+                    <input type="range" id="fanSpeed" min="0" max="100" value="0" onchange="controlFan(this.value)">
+                    <span id="fanSpeedValue">0%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Greenhouse Grid Preview -->
+        <section class="greenhouse-preview">
+            <h2>Greenhouse Layout</h2>
+            
+            <div class="layer-controls">
+                <label class="layer-toggle">
+                    <input type="checkbox" id="showLightFixtures" checked>
+                    <span class="checkmark"></span>
+                    Show Light Fixtures
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" id="showLightAmount">
+                    <span class="checkmark"></span>
+                    Show Light Amount
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" id="showSensorMarkers" checked>
+                    <span class="checkmark"></span>
+                    Show Sensor Markers
+                </label>
+                <label class="layer-toggle" title="Zones are always shown">
+                    <input type="checkbox" id="showZones" checked disabled>
+                    <span class="checkmark"></span>
+                    Show Zones (always on)
+                </label>
+            </div>
+            
+            <div id="greenhouse-grid" class="grid-container">
+                <!-- Grid will be populated by JavaScript -->
+                <div id="lights-overlay" class="lights-overlay">
+                    <!-- Light fixtures will be rendered here -->
+                </div>
+                <div id="sensors-overlay" class="sensors-overlay">
+                    <!-- Sensor markers will be rendered here -->
+                </div>
+            </div>
+            <a href="/zones" class="btn btn-primary">Configure Zones</a>
+        </section>
+
+        <!-- Recent Errors & Todos -->
+        <div class="info-panels">
+            <section class="recent-errors">
+                <h2>Recent Issues</h2>
+                <ul>
+                    {% for error in recent_errors %}
+                        <li>{{ error.timestamp }}: {{ error.message }}</li>
+                    {% else %}
+                        <li>No recent errors</li>
+                    {% endfor %}
+                </ul>
+            </section>
+
+            <section class="todos">
+                <h2>Reminders</h2>
+                <ul>
+                    {% for todo in todos %}
+                        <li>{{ todo.task }}</li>
+                    {% else %}
+                        <li>No pending tasks</li>
+                    {% endfor %}
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        // Initialize the grid on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGreenhouseGrid();
+            setInterval(updateStatus, 10000); // Update every 10 seconds
+        });
+    </script>
+</body>
+</html>

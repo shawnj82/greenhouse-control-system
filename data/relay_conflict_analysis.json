@@ -1,0 +1,191 @@
+{
+  "timestamp": "2025-10-12T08:55:09.557222",
+  "groups_analyzed": 3,
+  "conflict_summary": {
+    "no_conflict": 1,
+    "minor_conflict": 1,
+    "major_conflict": 1,
+    "severe_conflict": 0
+  },
+  "group_analyses": {
+    "mixed_plants_group": {
+      "group_description": "Lettuce and flowering plants - conflicting needs",
+      "lights_count": 2,
+      "zones_affected": 2,
+      "max_conflict_score": 0.3818095238095238,
+      "average_conflict_score": 0.3818095238095238,
+      "overall_conflict_level": "minor_conflict",
+      "detailed_conflicts": [
+        {
+          "light1": {
+            "id": "light_lettuce_01",
+            "plant": "lettuce",
+            "stage": "vegetative"
+          },
+          "light2": {
+            "id": "light_flowers_01",
+            "plant": "flowers",
+            "stage": "flowering"
+          },
+          "schedule_conflict": {
+            "schedule_overlap_hours": 12.0,
+            "total_schedule_hours": 14.0,
+            "schedule_conflict_score": 0.1428571428571429,
+            "earliest_start": "06:00:00",
+            "latest_end": "20:00:00",
+            "wasted_light_hours": 0.0
+          },
+          "spectrum_conflict": {
+            "spectrum_conflict_score": 0.21333333333333332,
+            "spectrum_compatibility": "good",
+            "color_differences": {
+              "red_difference": 20,
+              "blue_difference": 5,
+              "green_difference": 15
+            },
+            "color_temp_difference": 800
+          },
+          "intensity_conflict": {
+            "intensity_conflict_score": 1.0,
+            "intensity_compatibility": "incompatible",
+            "compromise_par": null,
+            "plant1_par_loss": null,
+            "plant2_par_loss": null,
+            "acceptable_range": null
+          },
+          "overall_conflict_score": 0.3818095238095238,
+          "conflict_level": "minor_conflict",
+          "recommendations": [
+            "\ud83d\udcaa Intensity compatibility: incompatible",
+            "\u274c Plants require incompatible light intensities - separate relays strongly recommended"
+          ]
+        }
+      ],
+      "group_recommendations": [
+        "\u2139\ufe0f Minor conflicts detected - monitor plant health closely",
+        "\ud83d\udcca Track plant performance to ensure adequate growth"
+      ]
+    },
+    "herbs_tomatoes_group": {
+      "group_description": "Herbs with flowering tomatoes - high conflict",
+      "lights_count": 2,
+      "zones_affected": 2,
+      "max_conflict_score": 0.4330919540229885,
+      "average_conflict_score": 0.4330919540229885,
+      "overall_conflict_level": "major_conflict",
+      "detailed_conflicts": [
+        {
+          "light1": {
+            "id": "light_herbs_01",
+            "plant": "herbs",
+            "stage": "vegetative"
+          },
+          "light2": {
+            "id": "light_tomatoes_01",
+            "plant": "tomatoes",
+            "stage": "fruiting"
+          },
+          "schedule_conflict": {
+            "schedule_overlap_hours": 11.5,
+            "total_schedule_hours": 14.5,
+            "schedule_conflict_score": 0.2068965517241379,
+            "earliest_start": "06:00:00",
+            "latest_end": "20:30:00",
+            "wasted_light_hours": 0.5
+          },
+          "spectrum_conflict": {
+            "spectrum_conflict_score": 0.2866666666666667,
+            "spectrum_compatibility": "good",
+            "color_differences": {
+              "red_difference": 28,
+              "blue_difference": 13,
+              "green_difference": 15
+            },
+            "color_temp_difference": 1000
+          },
+          "intensity_conflict": {
+            "intensity_conflict_score": 1.0,
+            "intensity_compatibility": "incompatible",
+            "compromise_par": null,
+            "plant1_par_loss": null,
+            "plant2_par_loss": null,
+            "acceptable_range": null
+          },
+          "overall_conflict_score": 0.4330919540229885,
+          "conflict_level": "major_conflict",
+          "recommendations": [
+            "\ud83d\udcaa Intensity compatibility: incompatible",
+            "\u274c Plants require incompatible light intensities - separate relays strongly recommended",
+            "\u26a0\ufe0f MAJOR CONFLICT: Consider if cost savings justify plant compromise",
+            "\ud83d\udd27 Evaluate using separate relay or relocating plants"
+          ]
+        }
+      ],
+      "group_recommendations": [
+        "\u26a0\ufe0f WARNING: This relay group has significant conflicts",
+        "\ud83d\udcb0 Evaluate if hardware savings justify plant health compromise",
+        "\ud83d\udd04 Consider regrouping lights with more compatible plants"
+      ]
+    },
+    "compatible_group": {
+      "group_description": "Two lettuce beds - compatible",
+      "lights_count": 2,
+      "zones_affected": 2,
+      "max_conflict_score": 0.009615384615384616,
+      "average_conflict_score": 0.009615384615384616,
+      "overall_conflict_level": "no_conflict",
+      "detailed_conflicts": [
+        {
+          "light1": {
+            "id": "light_lettuce_02",
+            "plant": "lettuce",
+            "stage": "vegetative"
+          },
+          "light2": {
+            "id": "light_lettuce_03",
+            "plant": "lettuce",
+            "stage": "vegetative"
+          },
+          "schedule_conflict": {
+            "schedule_overlap_hours": 14.0,
+            "total_schedule_hours": 14.0,
+            "schedule_conflict_score": 0.0,
+            "earliest_start": "06:00:00",
+            "latest_end": "20:00:00",
+            "wasted_light_hours": 0.0
+          },
+          "spectrum_conflict": {
+            "spectrum_conflict_score": 0.0,
+            "spectrum_compatibility": "excellent",
+            "color_differences": {
+              "red_difference": 0,
+              "blue_difference": 0,
+              "green_difference": 0
+            },
+            "color_temp_difference": 0
+          },
+          "intensity_conflict": {
+            "intensity_conflict_score": 0.038461538461538464,
+            "intensity_compatibility": "excellent",
+            "compromise_par": 185.0,
+            "plant1_par_loss": 5.0,
+            "plant2_par_loss": 5.0,
+            "acceptable_range": [
+              120,
+              250
+            ]
+          },
+          "overall_conflict_score": 0.009615384615384616,
+          "conflict_level": "no_conflict",
+          "recommendations": [
+            "\u2705 Plants are compatible for shared relay control"
+          ]
+        }
+      ],
+      "group_recommendations": [
+        "\u2705 Plants in this group are compatible for shared control",
+        "\ud83d\udcb0 Good candidate for cost-effective relay sharing"
+      ]
+    }
+  }
+}

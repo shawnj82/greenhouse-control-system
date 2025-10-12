@@ -1,0 +1,63 @@
+{
+  "timestamp": "2025-10-12T09:04:35.707707",
+  "total_recommendations": 2,
+  "high_priority": 0,
+  "medium_priority": 2,
+  "low_priority": 0,
+  "estimated_monthly_savings": 0,
+  "recommendations": [
+    {
+      "category": "Light Intensity",
+      "priority": "MEDIUM",
+      "title": "Increase Light Intensity for Underlit Zones",
+      "problem_description": "Found 4 zones with insufficient light intensity. Average deficit: 50 PAR",
+      "impact": "Estimated 15-30% yield reduction in affected zones",
+      "cost_range": "$15-50 per zone (supplemental LEDs or upgrades)",
+      "roi_timeline": "3-6 weeks",
+      "implementation_steps": [
+        "Measure actual PAR levels with 'python test_tcs34725.py'",
+        "Add supplemental LED strips to boost intensity",
+        "Or replace existing lights with higher wattage units",
+        "Reposition lights for better coverage",
+        "Update light configurations in system"
+      ],
+      "tools_needed": [
+        "PAR meter or TCS34725 sensor",
+        "supplemental LEDs"
+      ],
+      "success_metrics": [
+        "All zones meeting minimum PAR requirements",
+        "Improved plant vigor and color",
+        "Faster growth rates",
+        "Better flowering/fruiting"
+      ]
+    },
+    {
+      "category": "Zone Organization",
+      "priority": "MEDIUM",
+      "title": "Optimize Zone Layout and Grouping",
+      "problem_description": "Found 0 mixed-use zones and 3 small zones that could be reorganized for better automation",
+      "impact": "Improved automation effectiveness and easier plant management",
+      "cost_range": "$0-50 (barriers, reorganization supplies)",
+      "roi_timeline": "Immediate (operational efficiency)",
+      "implementation_steps": [
+        "Review current zone boundaries and plant groupings",
+        "Split mixed zones by plant type or growth stage",
+        "Merge compatible small zones for easier management",
+        "Install physical barriers between different plant types",
+        "Update zone configurations in system"
+      ],
+      "tools_needed": [
+        "Zone barriers",
+        "labels",
+        "measuring tools"
+      ],
+      "success_metrics": [
+        "Each zone contains similar plant types",
+        "Reduced need for manual interventions",
+        "More consistent automation behavior",
+        "Easier plant care management"
+      ]
+    }
+  ]
+}

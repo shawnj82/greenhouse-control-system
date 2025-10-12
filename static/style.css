@@ -1,0 +1,795 @@
+/* Zone Stage Badge */
+.zone-stage-badge {
+    display: inline-block;
+    background: #2196f3;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin: 2px 0 2px 0;
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 2px rgba(33,150,243,0.08);
+    vertical-align: middle;
+}
+/* CSS for Crane Creek Greenhouse Control Interface */
+
+:root {
+    --primary-color: #2e7d32;
+    --secondary-color: #66bb6a;
+    --accent-color: #4caf50;
+    --warning-color: #ff9800;
+    --error-color: #f44336;
+    --bg-color: #f5f5f5;
+    --card-bg: #ffffff;
+    --text-color: #333;
+    --border-color: #ddd;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 1rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    margin-bottom: 0.5rem;
+}
+
+nav {
+    display: flex;
+    gap: 1rem;
+}
+
+.nav-link {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.nav-link:hover, .nav-link.active {
+    background-color: rgba(255,255,255,0.2);
+}
+
+main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+section {
+    background: var(--card-bg);
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+h2 {
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--accent-color);
+    padding-bottom: 0.5rem;
+}
+
+/* Status Overview */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.status-card {
+    background: linear-gradient(135deg, #e8f5e8, #f1f8e9);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.status-card h3 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.status-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+/* Device Controls */
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.control-card {
+    background: #fafafa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.control-card h3 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+/* Buttons */
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+    margin: 0.25rem;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-success {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-warning {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-on {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-off {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Greenhouse Grid */
+.grid-container {
+    display: grid;
+    gap: 2px;
+    background-color: var(--border-color);
+    padding: 2px;
+    border-radius: 5px;
+    margin: 1rem 0;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+    position: relative; /* Ensure overlays position relative to the grid */
+}
+
+.grid-cell {
+    background-color: #f9f9f9;
+    border: 1px solid var(--border-color);
+    aspect-ratio: 1 / 1; /* Ensures perfect square */
+    min-height: 60px;
+    min-width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    text-align: center;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    /* Subtle grid pattern to emphasize square nature */
+    background-image: 
+        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+    background-size: 10px 10px;
+}
+
+.grid-cell.planted {
+    background-color: #e8f5e8;
+    border-color: var(--accent-color);
+}
+
+.grid-cell.needs-water {
+    background-color: #fff3cd;
+    border-color: var(--warning-color);
+}
+
+.grid-cell.editable:hover {
+    background-color: #e3f2fd;
+    cursor: pointer;
+    transform: scale(1.02);
+}
+
+.grid-cell.selected {
+    background-color: #bbdefb;
+    border-color: #2196f3;
+    border-width: 2px;
+}
+
+/* Scale Indicator */
+.scale-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.scale-box {
+    width: 30px;
+    height: 30px;
+    border: 2px solid var(--primary-color);
+    background-color: rgba(46, 125, 50, 0.1);
+    background-image: 
+        linear-gradient(rgba(46, 125, 50, 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(46, 125, 50, 0.2) 1px, transparent 1px);
+    background-size: 5px 5px;
+}
+
+/* Zone Configuration */
+.zone-config {
+    margin-bottom: 2rem;
+}
+
+.zone-config p:last-of-type {
+    color: var(--primary-color);
+    font-weight: 500;
+    font-style: italic;
+    margin-bottom: 1rem;
+}
+
+.grid-controls {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+}
+
+.grid-controls label {
+    margin-right: 1rem;
+}
+
+.grid-controls input[type="number"] {
+    width: 60px;
+    padding: 0.25rem;
+    margin: 0 0.25rem;
+}
+
+.zone-details {
+    background-color: #f8f9fa;
+    border: 2px solid var(--primary-color);
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    font-size: 1rem;
+}
+
+.form-group input[type="number"] {
+    width: 80px;
+    display: inline-block;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+/* Info Panels */
+.info-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.recent-errors ul,
+.todos ul {
+    list-style-type: none;
+}
+
+.recent-errors li,
+.todos li {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background-color: #f8f9fa;
+    border-left: 4px solid var(--accent-color);
+    border-radius: 3px;
+}
+
+/* Fan Speed Control */
+input[type="range"] {
+    width: 100%;
+    margin: 0.5rem 0;
+}
+
+#fanSpeedValue {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* Light Spectrum Controls */
+.spectrum-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+}
+
+.spectrum-input {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.spectrum-input label {
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.spectrum-slider {
+    width: 80px !important;
+    padding: 0.3rem !important;
+    text-align: center;
+}
+
+.spectrum-total {
+    grid-column: span 2;
+    text-align: center;
+    font-weight: bold;
+    padding: 0.5rem;
+    background-color: var(--card-bg);
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+}
+
+/* Spectrum value indicators */
+.spectrum-input input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+}
+
+/* Color-coded spectrum inputs */
+#redPercent {
+    border-left: 4px solid #f44336;
+}
+
+#bluePercent {
+    border-left: 4px solid #2196f3;
+}
+
+#whitePercent {
+    border-left: 4px solid #9e9e9e;
+}
+
+#parTarget {
+    border-left: 4px solid var(--warning-color);
+}
+
+/* Layer Controls */
+.layer-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.layer-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color);
+    user-select: none;
+}
+
+.layer-toggle input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.layer-toggle .checkmark {
+    position: relative;
+}
+
+/* Lights Overlay */
+.lights-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 15;
+}
+
+/* Sensors Overlay */
+.sensors-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 18;
+}
+
+.sensor-marker {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #1976d2;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.sensor-marker .tooltip {
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    display: none;
+}
+
+.sensor-marker:hover .tooltip {
+    display: block;
+}
+/* Light Amount Visualization */
+.light-amount-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    display: grid;
+}
+
+.light-amount-cell {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    transition: background-color 0.3s ease;
+}
+
+.light-amount-info {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    color: white;
+    z-index: 11;
+}
+
+/* Light intensity color mapping */
+.light-intensity-0 { background-color: rgba(0, 0, 0, 0.8); }      /* Very dark - no light */
+.light-intensity-1 { background-color: rgba(25, 25, 50, 0.7); }   /* Very low light */
+.light-intensity-2 { background-color: rgba(50, 50, 100, 0.6); }  /* Low light */
+.light-intensity-3 { background-color: rgba(75, 75, 150, 0.5); }  /* Medium-low light */
+.light-intensity-4 { background-color: rgba(100, 100, 200, 0.4); } /* Medium light */
+.light-intensity-5 { background-color: rgba(125, 175, 125, 0.4); } /* Good light */
+.light-intensity-6 { background-color: rgba(150, 200, 100, 0.3); } /* High light */
+.light-intensity-7 { background-color: rgba(175, 225, 75, 0.3); }  /* Very high light */
+.light-intensity-8 { background-color: rgba(200, 250, 50, 0.2); }  /* Excellent light */
+.light-intensity-9 { background-color: rgba(255, 255, 100, 0.2); } /* Maximum light */
+
+/* Tables (used in sensors list) */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+}
+.table th, .table td {
+    border: 1px solid var(--border-color);
+    padding: 0.5rem;
+    text-align: left;
+}
+.table thead {
+    background: #f1f3f5;
+}
+
+.light-fixture {
+    background-color: rgba(255, 193, 7, 0.4);
+    border: 2px solid #ffc107;
+    border-radius: 5px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 20;
+    min-width: 30px;
+    min-height: 30px;
+}
+
+.light-fixture:hover {
+    background-color: rgba(255, 193, 7, 0.6);
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.light-fixture-on,
+.light-fixture.status-on {
+    background-color: rgba(76, 175, 80, 0.4);
+    border-color: #4caf50;
+}
+
+.light-fixture-off,
+.light-fixture.status-off {
+    background-color: rgba(158, 158, 158, 0.4);
+    border-color: #9e9e9e;
+}
+
+.light-info {
+    text-align: center;
+    padding: 0.25rem;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 3px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    max-width: 90%;
+}
+
+.light-name {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 0.1rem;
+}
+
+.light-specs {
+    color: var(--text-color);
+    font-size: 0.6rem;
+}
+
+.light-status {
+    font-weight: bold;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+    margin-top: 0.1rem;
+}
+
+.light-status.status-on {
+    background-color: #4caf50;
+    color: white;
+}
+
+.light-status.status-off {
+    background-color: #9e9e9e;
+    color: white;
+}
+
+/* Grid Container Position */
+.grid-container {
+    position: relative;
+}
+
+/* Lights Configuration Page */
+.lights-config {
+    margin-bottom: 2rem;
+}
+
+.lights-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+}
+
+.lights-grid-preview {
+    margin-bottom: 2rem;
+}
+
+.light-details {
+    background-color: #f8f9fa;
+    border: 2px solid var(--warning-color);
+    padding: 1.5rem;
+    border-radius: 5px;
+    margin-bottom: 2rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.position-controls {
+    background-color: #fff;
+    padding: 1rem;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+}
+
+/* Lights Table */
+.lights-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.lights-table th,
+.lights-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.lights-table th {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}
+
+.lights-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+.lights-table .status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.lights-table .status.status-on {
+    background-color: #4caf50;
+    color: white;
+}
+
+.lights-table .status.status-off {
+    background-color: #9e9e9e;
+    color: white;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    margin-right: 0.25rem;
+}
+
+.btn-danger {
+    background-color: var(--error-color);
+    color: white;
+    border: none;
+}
+
+.btn-danger:hover {
+    background-color: #d32f2f;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .status-grid,
+    .controls-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .info-panels {
+        grid-template-columns: 1fr;
+    }
+    
+    main {
+        padding: 1rem;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .grid-controls {
+        text-align: center;
+    }
+    
+    .grid-controls label {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    
+    .spectrum-controls {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .spectrum-total {
+        grid-column: span 1;
+    }
+    
+    /* Maintain square grid cells on mobile */
+    .grid-cell {
+        min-height: 40px;
+        min-width: 40px;
+        font-size: 0.7rem;
+    }
+    
+    /* Ensure grid container is scrollable on small screens */
+    .grid-container {
+        overflow-x: auto;
+        overflow-y: visible;
+    }
+}

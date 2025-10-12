@@ -1,0 +1,9 @@
+Adafruit_DHT==1.4.0
+RPi.GPIO==0.7.0
+smbus2==0.4.4
+pyserial==3.5
+Flask==2.3.3
+numpy>=2.3.3
+scipy>=1.16.2
+adafruit-circuitpython-as7341==1.2.15
+adafruit-circuitpython-tcs34725==3.3.20

@@ -1,0 +1,52 @@
+{
+  "lights": {
+    "light_lettuce_01": {
+      "description": "LED strip over lettuce bed 1",
+      "zone_key": "zone_lettuce_01",
+      "power_watts": 75,
+      "par_at_canopy": 180,
+      "color_temperature": 4000,
+      "spectrum": "full_spectrum_cool"
+    },
+    "light_flowers_01": {
+      "description": "Full spectrum panel over flowering plants",
+      "zone_key": "zone_flowers_01", 
+      "power_watts": 75,
+      "par_at_canopy": 400,
+      "color_temperature": 3200,
+      "spectrum": "flowering_optimized"
+    },
+    "light_herbs_01": {
+      "description": "Small LED for herb garden",
+      "zone_key": "zone_herbs_01",
+      "power_watts": 50,
+      "par_at_canopy": 150,
+      "color_temperature": 4200,
+      "spectrum": "full_spectrum_cool"
+    },
+    "light_tomatoes_01": {
+      "description": "High power LED for fruiting tomatoes", 
+      "zone_key": "zone_tomatoes_01",
+      "power_watts": 150,
+      "par_at_canopy": 600,
+      "color_temperature": 3200,
+      "spectrum": "fruiting_optimized"
+    },
+    "light_lettuce_02": {
+      "description": "LED strip over lettuce bed 2",
+      "zone_key": "zone_lettuce_02",
+      "power_watts": 60,
+      "par_at_canopy": 180,
+      "color_temperature": 4000,
+      "spectrum": "full_spectrum_cool"
+    },
+    "light_lettuce_03": {
+      "description": "LED strip over lettuce bed 3", 
+      "zone_key": "zone_lettuce_03",
+      "power_watts": 60,
+      "par_at_canopy": 185,
+      "color_temperature": 4000,
+      "spectrum": "full_spectrum_cool"
+    }
+  }
+}

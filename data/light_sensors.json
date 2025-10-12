@@ -1,0 +1,56 @@
+{
+  "sensors": {
+    "bh1750_1": {
+      "name": "Basic Light Sensor A1",
+      "type": "BH1750",
+      "connection": {
+        "bus": 1,
+        "address": 35
+      },
+      "zone_key": "A1",
+      "position": {
+        "row": 1,
+        "col": 1
+      }
+    },
+    "tsl2591_1": {
+      "name": "Spectrum Sensor A2",
+      "type": "TSL2591",
+      "connection": {
+        "bus": 1,
+        "address": 41
+      },
+      "zone_key": "A2",
+      "position": {
+        "row": 1,
+        "col": 2
+      }
+    },
+    "veml7700_1": {
+      "name": "Precision Sensor B1",
+      "type": "VEML7700",
+      "connection": {
+        "bus": 1,
+        "address": 16
+      },
+      "zone_key": "B1",
+      "position": {
+        "row": 2,
+        "col": 1
+      }
+    },
+    "tsl2561_1": {
+      "name": "Standard Sensor B2",
+      "type": "TSL2561",
+      "connection": {
+        "bus": 1,
+        "address": 57
+      },
+      "zone_key": "B2",
+      "position": {
+        "row": 2,
+        "col": 2
+      }
+    }
+  }
+}

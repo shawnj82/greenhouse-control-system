@@ -1,0 +1,22 @@
+{
+  "todos": [
+    {
+      "id": 1,
+      "task": "Check tomato support stakes",
+      "priority": "medium",
+      "due_date": "2025-10-12"
+    },
+    {
+      "id": 2,
+      "task": "Harvest mature lettuce leaves",
+      "priority": "low",
+      "due_date": "2025-10-11"
+    },
+    {
+      "id": 3,
+      "task": "Clean water reservoir",
+      "priority": "high",
+      "due_date": "2025-10-15"
+    }
+  ]
+}

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lights Configuration - Crane Creek Greenhouse</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>💡 Lights Configuration</h1>
+        <nav>
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/zones" class="nav-link">Zones</a>
+            <a href="/lights" class="nav-link active">Lights</a>
+            <a href="/calibration" class="nav-link">Calibration</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="lights-config">
+            <h2>Light Fixtures Management</h2>
+            <p>Configure your greenhouse lighting system with precise positioning and specifications.</p>
+            
+            <div class="lights-controls">
+                <button onclick="addNewLight()" class="btn btn-success">Add New Light</button>
+                <button onclick="saveLights()" class="btn btn-primary">Save Configuration</button>
+            </div>
+
+            <div class="lights-grid-preview">
+                <h3>Grid Preview with Lights</h3>
+                <div class="layer-controls">
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="showLightsPreview" checked>
+                        <span class="checkmark"></span>
+                        Show Lights
+                    </label>
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="showZonesPreview" checked>
+                        <span class="checkmark"></span>
+                        Show Zones
+                    </label>
+                </div>
+                
+                <div id="greenhouse-grid" class="grid-container">
+                    <!-- Grid will be populated by JavaScript -->
+                    <div id="lights-overlay" class="lights-overlay">
+                        <!-- Light fixtures will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Light Sensors Management -->
+        <section class="light-sensors">
+            <h2>Light Sensors</h2>
+            <p>Configure light sensors, their connection to Raspberry Pi, and the zone they monitor.</p>
+
+            <div class="lights-controls">
+                <button onclick="addNewLightSensor()" class="btn btn-success">Add New Sensor</button>
+                <button onclick="saveLightSensors()" class="btn btn-primary">Save Sensors</button>
+            </div>
+
+            <div id="lightSensorsTable"></div>
+        </section>
+
+        <!-- Light Configuration Panel -->
+        <section class="light-details" id="lightDetails" style="display: none;">
+            <h3>Configure Light <span id="selectedLight"></span></h3>
+            <form id="lightForm">
+                <div class="form-group">
+                    <label for="lightName">Light Name:</label>
+                    <input type="text" id="lightName" placeholder="e.g., Main LED Panel 1">
+                </div>
+                
+                <div class="form-group">
+                    <label for="lightType">Light Type:</label>
+                    <select id="lightType">
+                        <option value="LED Panel">LED Panel</option>
+                        <option value="T5 Fluorescent">T5 Fluorescent</option>
+                        <option value="T8 Fluorescent">T8 Fluorescent</option>
+                        <option value="HPS">High Pressure Sodium</option>
+                        <option value="MH">Metal Halide</option>
+                        <option value="CFL">Compact Fluorescent</option>
+                        <option value="Strip Light">LED Strip</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="lightWidth">Width (inches):</label>
+                        <input type="number" id="lightWidth" min="1" max="120" value="24">
+                    </div>
+                    <div class="form-group">
+                        <label for="lightHeight">Height (inches):</label>
+                        <input type="number" id="lightHeight" min="1" max="120" value="12">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="lightPower">Power (watts):</label>
+                        <input type="number" id="lightPower" min="1" max="1000" value="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="dimmingLevel">Dimming (%):</label>
+                        <input type="number" id="dimmingLevel" min="0" max="100" value="100">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Grid Position:</label>
+                    <div class="position-controls">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="positionRow">Row:</label>
+                                <input type="number" id="positionRow" min="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="positionCol">Column:</label>
+                                <input type="number" id="positionCol" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="rowSpan">Row Span:</label>
+                                <input type="number" id="rowSpan" min="1" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="colSpan">Column Span:</label>
+                                <input type="number" id="colSpan" min="1" value="2">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Light Spectrum:</label>
+                    <div class="spectrum-controls">
+                        <div class="spectrum-input">
+                            <label for="lightRedPercent">Red (%):</label>
+                            <input type="number" id="lightRedPercent" min="0" max="100" value="40" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-input">
+                            <label for="lightBluePercent">Blue (%):</label>
+                            <input type="number" id="lightBluePercent" min="0" max="100" value="20" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-input">
+                            <label for="lightWhitePercent">White (%):</label>
+                            <input type="number" id="lightWhitePercent" min="0" max="100" value="40" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-total">
+                            Total: <span id="lightSpectrumTotal">100</span>%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="lightNotes">Notes:</label>
+                    <textarea id="lightNotes" rows="3" placeholder="Installation notes, control details..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" onclick="applyLightConfig()" class="btn btn-success">Apply</button>
+                    <button type="button" onclick="deleteLight()" class="btn btn-danger">Delete Light</button>
+                    <button type="button" onclick="closeLightConfig()" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Lights List -->
+        <section class="lights-list">
+            <h3>Current Light Fixtures</h3>
+            <div id="lightsTable">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+    // Initialize page globals using strings to avoid static analysis errors
+    // Assign into existing global bindings so app.js functions see the same objects
+    currentLights = JSON.parse('{{ lights | tojson | safe }}');
+    currentZones = JSON.parse('{{ zones | tojson | safe }}');
+        window.selectedLightKey = null;
+        // Ensure sensors object exists; will be populated by loadLightSensors()
+        window.currentLightSensors = window.currentLightSensors || { config: { sensors: {} }, readings: {} };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial grid size from zones data
+            gridSize = currentZones.grid_size || { rows: 4, cols: 6 };
+            
+            // Load grid and lights
+            renderGrid(false); // Not editable on lights page
+            renderLightsOverlay();
+            renderLightsTable();
+            loadLightSensors();
+            
+            // Add spectrum input listeners
+            const lightSpectrumInputs = ['lightRedPercent', 'lightBluePercent', 'lightWhitePercent'];
+            lightSpectrumInputs.forEach(inputId => {
+                const input = document.getElementById(inputId);
+                if (input) {
+                    input.addEventListener('input', updateLightSpectrumTotal);
+                    input.addEventListener('change', updateLightSpectrumTotal);
+                }
+            });
+            
+            // Add layer toggle listeners
+            const showLightsPreview = document.getElementById('showLightsPreview');
+            const showZonesPreview = document.getElementById('showZonesPreview');
+            
+            if (showLightsPreview) {
+                showLightsPreview.addEventListener('change', function() {
+                    renderLightsOverlay();
+                });
+            }
+            
+            if (showZonesPreview) {
+                showZonesPreview.addEventListener('change', function() {
+                    const gridCells = document.querySelectorAll('.grid-cell');
+                    gridCells.forEach(cell => {
+                        cell.style.display = this.checked ? 'flex' : 'none';
+                    });
+                });
+            }
+        });
+
+        function loadLightSensors() {
+            fetch('/api/light-sensors').then(r => r.json()).then(data => {
+                currentLightSensors = data || { config: { sensors: {} }, readings: {} };
+                renderLightSensorsTable();
+            }).catch(err => console.error('Failed to load light sensors', err));
+        }
+
+        function renderLightSensorsTable() {
+            const container = document.getElementById('lightSensorsTable');
+            const sensors = currentLightSensors?.config?.sensors || {};
+            const rows = Object.entries(sensors).map(([id, s]) => `
+                <tr data-sensor-id="${id}">
+                    <td><input value="${s.name || ''}" data-field="name"/></td>
+                    <td>
+                        <select data-field="type" value="${s.type || 'BH1750'}">
+                            <option value="BH1750" ${s.type==='BH1750'?'selected':''}>BH1750</option>
+                            <option value="TSL2561" ${s.type==='TSL2561'?'selected':''}>TSL2561</option>
+                            <option value="VEML7700" ${s.type==='VEML7700'?'selected':''}>VEML7700</option>
+                        </select>
+                    </td>
+                    <td>
+                        Bus: <input type="number" min="0" style="width:70px" value="${(s.connection&&s.connection.bus)!=null?s.connection.bus:1}" data-field="bus"/>
+                        Addr: <input type="number" min="0" max="127" style="width:70px" value="${(s.connection&&s.connection.address)!=null?s.connection.address:35}" data-field="address"/>
+                    </td>
+                    <td>
+                        Zone:
+                        <select data-field="zone_key">
+                            ${getZoneOptions(s.zone_key)}
+                        </select>
+                    </td>
+                    <td>
+                        <span>${(currentLightSensors.readings && currentLightSensors.readings[id] && currentLightSensors.readings[id].lux != null) ? Math.round(currentLightSensors.readings[id].lux) + ' lux' : '—'}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-danger" onclick="deleteLightSensor('${id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+            container.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th><th>Type</th><th>Connection</th><th>Zone</th><th>Reading</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows || '<tr><td colspan="6">No sensors configured</td></tr>'}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        window.addNewLightSensor = function() {
+            const id = `ls-${Date.now()}`;
+            if (!currentLightSensors.config) currentLightSensors.config = { sensors: {} };
+            if (!currentLightSensors.config.sensors) currentLightSensors.config.sensors = {};
+            currentLightSensors.config.sensors[id] = {
+                name: 'New Sensor',
+                type: 'BH1750',
+                connection: { bus: 1, address: 35 },
+                zone_key: '',
+                notes: ''
+            };
+            renderLightSensorsTable();
+        }
+
+        window.deleteLightSensor = function(id) {
+            if (currentLightSensors?.config?.sensors && currentLightSensors.config.sensors[id]) {
+                delete currentLightSensors.config.sensors[id];
+                renderLightSensorsTable();
+            }
+        }
+
+        window.saveLightSensors = function() {
+            // Read values back from the table
+            const tbody = document.querySelector('#lightSensorsTable tbody');
+            if (!tbody) return;
+            const sensors = {};
+            tbody.querySelectorAll('tr').forEach(tr => {
+                const id = tr.getAttribute('data-sensor-id');
+                const get = sel => tr.querySelector(sel);
+                const name = get('input[data-field="name"]').value;
+                const type = get('select[data-field="type"]').value;
+                const bus = parseInt(get('input[data-field="bus"]').value, 10);
+                const address = parseInt(get('input[data-field="address"]').value, 10);
+                const zone_key = get('select[data-field="zone_key"]').value;
+                sensors[id] = {
+                    name, type,
+                    connection: { bus, address },
+                    zone_key
+                };
+            });
+            const payload = { sensors };
+            fetch('/api/light-sensors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    loadLightSensors();
+                    alert('Light sensors saved');
+                    // Re-render overlays in case readings updated
+                    renderLightsOverlay();
+                } else {
+                    alert('Failed to save sensors: ' + (res.error || 'unknown'));
+                }
+            }).catch(err => alert('Failed to save sensors: ' + err));
+        }
+
+        function getZoneOptions(selected) {
+            const size = currentZones?.grid_size || { rows: 4, cols: 6 };
+            const options = [];
+            for (let r = 0; r < size.rows; r++) {
+                for (let c = 0; c < size.cols; c++) {
+                    const key = `${r}-${c}`;
+                    const zoneName = currentZones?.zones?.[key]?.crop || `Cell ${key}`;
+                    options.push(`<option value="${key}" ${selected===key?'selected':''}>${zoneName} (${key})</option>`);
+                }
+            }
+            return options.join('');
+        }
+    </script>
+</body>
+</html>

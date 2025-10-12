@@ -1,0 +1,93 @@
+{
+  "energy_cost_per_kwh": 0.15,
+  "time_of_use_pricing": {
+    "off_peak": {
+      "multiplier": 0.8,
+      "hours": [
+        23,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "standard": {
+      "multiplier": 1.2,
+      "hours": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    "peak": {
+      "multiplier": 2.5,
+      "hours": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    }
+  },
+  "growth_schedules": {
+    "lettuce": {
+      "light_hours_per_day": 16,
+      "preferred_start_time": "05:30",
+      "preferred_end_time": "21:30",
+      "intensity_curve": "aggressive_ramp",
+      "target_dli": 16.0
+    },
+    "basil": {
+      "light_hours_per_day": 16,
+      "preferred_start_time": "05:00",
+      "preferred_end_time": "21:00",
+      "intensity_curve": "steady",
+      "target_dli": 16.0,
+      "description": "Herbs requiring longer photoperiods"
+    },
+    "tomatoes": {
+      "light_hours_per_day": 16,
+      "preferred_start_time": "06:00",
+      "preferred_end_time": "22:00",
+      "intensity_curve": "high_intensity",
+      "target_dli": 20.0,
+      "description": "Fruiting plants with high light demands"
+    },
+    "herbs": {
+      "light_hours_per_day": 12,
+      "preferred_start_time": "07:00",
+      "preferred_end_time": "19:00",
+      "intensity_curve": "gentle",
+      "target_dli": 12.0,
+      "description": "General herbs with moderate requirements"
+    },
+    "seedlings": {
+      "light_hours_per_day": 14,
+      "preferred_start_time": "07:00",
+      "preferred_end_time": "21:00",
+      "intensity_curve": "gentle_ramp",
+      "target_dli": 10.0,
+      "description": "Young plants requiring gentle light"
+    },
+    "flowering": {
+      "light_hours_per_day": 12,
+      "preferred_start_time": "06:00",
+      "preferred_end_time": "18:00",
+      "intensity_curve": "high_intensity",
+      "target_dli": 25.0,
+      "description": "Flowering stage requiring intense light"
+    }
+  }
+}

@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Calibration - Greenhouse Control</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Light Calibration System</h1>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/zones">Zones</a>
+                <a href="/lights">Lights</a>
+                <a href="/calibration" class="active">Calibration</a>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Calibration Status -->
+            <section class="calibration-status">
+                <h2>Calibration Status</h2>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>Last Calibration</h3>
+                        <p id="last-calibration">
+                            {% if calibration.timestamp %}
+                                {{ calibration.timestamp }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="status-card">
+                        <h3>Sensors</h3>
+                        <p id="sensor-count">{{ sensors.sensors|length }} configured</p>
+                    </div>
+                    <div class="status-card">
+                        <h3>Lights</h3>
+                        <p id="light-count">{{ lights.lights|length }} configured</p>
+                    </div>
+                    <div class="status-card">
+                        <h3>Quality Score</h3>
+                        <p id="quality-score">-</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <h2>Quick Actions</h2>
+                <div class="action-buttons">
+                    <button id="btn-ambient-status" class="btn btn-info">Check Ambient Conditions</button>
+                    <button id="btn-measure-baseline" class="btn btn-secondary">Measure Baseline</button>
+                    <button id="btn-full-calibration" class="btn btn-primary">Run Full Calibration</button>
+                    <button id="btn-adaptive-calibration" class="btn btn-info">Adaptive Calibration</button>
+                    <button id="btn-ambient-aware" class="btn btn-warning">Ambient-Aware Calibration</button>
+                    <button id="btn-optimize-lights" class="btn btn-success">Optimize for Zones</button>
+                    <button id="btn-all-lights-off" class="btn btn-danger">All Lights Off</button>
+                </div>
+                <div class="optimization-options">
+                    <label for="optimization-method">Optimization Method:</label>
+                    <select id="optimization-method">
+                        <option value="multi_objective">Multi-Objective (Recommended)</option>
+                        <option value="greedy">Greedy</option>
+                        <option value="weighted_ls">Weighted Least Squares</option>
+                        <option value="linear">Linear Programming</option>
+                    </select>
+                    <label>
+                        <input type="checkbox" id="apply-optimization" checked>
+                        Apply optimization automatically
+                    </label>
+                </div>
+            </section>
+
+            <!-- Ambient Light Status -->
+            <section class="ambient-status">
+                <h2>Ambient Light Conditions</h2>
+                <div id="ambient-container" class="ambient-grid">
+                    <p>Click "Check Ambient Conditions" to analyze current lighting environment.</p>
+                </div>
+            </section>
+
+            <!-- Zone Capabilities -->
+            <section class="zone-capabilities">
+                <h2>Zone Capabilities & Status</h2>
+                <div id="capabilities-container" class="capabilities-grid">
+                    <p>Click "Check Capabilities" to analyze zone sensor and light capabilities.</p>
+                </div>
+                <button id="btn-check-capabilities" class="btn btn-secondary">Check Capabilities</button>
+            </section>
+
+            <!-- Individual Light Control -->
+            <section class="light-control">
+                <h2>Individual Light Control</h2>
+                <div class="lights-grid">
+                    {% for light_id, light in lights.lights.items() %}
+                    <div class="light-card" data-light-id="{{ light_id }}">
+                        <h3>{{ light.name }}</h3>
+                        <p>{{ light.type }} - {{ light.power_watts }}W</p>
+                        <p>Position: Row {{ light.position.row }}, Col {{ light.position.col }}</p>
+                        <div class="light-controls">
+                            <button class="btn btn-sm btn-success light-on" data-light-id="{{ light_id }}">On</button>
+                            <button class="btn btn-sm btn-secondary light-off" data-light-id="{{ light_id }}">Off</button>
+                            <button class="btn btn-sm btn-primary light-calibrate" data-light-id="{{ light_id }}">Calibrate</button>
+                        </div>
+                        <div class="light-status" id="status-{{ light_id }}">Ready</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- Sensor Readings -->
+            <section class="sensor-readings">
+                <h2>Live Sensor Readings</h2>
+                <div class="sensors-grid">
+                    {% for sensor_id, sensor in sensors.sensors.items() %}
+                    <div class="sensor-card">
+                        <h3>{{ sensor.name }}</h3>
+                        <p>{{ sensor.type }} - Zone: {{ sensor.zone_key or 'N/A' }}</p>
+                        <div class="sensor-reading" id="reading-{{ sensor_id }}">
+                            <span class="lux-value">-- lux</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button id="btn-refresh-sensors" class="btn btn-secondary">Refresh Readings</button>
+            </section>
+
+            <!-- Calibration Results -->
+            <section class="calibration-results">
+                <h2>Calibration Results</h2>
+                <div class="results-container">
+                    {% if calibration.light_effects %}
+                    <div class="effect-matrix">
+                        <h3>Light Effects Matrix</h3>
+                        <table class="matrix-table">
+                            <thead>
+                                <tr>
+                                    <th>Light \ Sensor</th>
+                                    {% for sensor_id in sensors.sensors.keys() %}
+                                    <th>{{ sensors.sensors[sensor_id].name }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for light_id, effects in calibration.light_effects.items() %}
+                                <tr>
+                                    <td><strong>{{ lights.lights[light_id].name if light_id in lights.lights else light_id }}</strong></td>
+                                    {% for sensor_id in sensors.sensors.keys() %}
+                                    <td class="effect-cell" data-effect="{{ effects.get(sensor_id, 0) }}">
+                                        {{ "%.1f"|format(effects.get(sensor_id, 0)) }}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="no-data">No calibration data available. Run calibration to see results.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Optimization Preview -->
+            <section class="optimization-preview">
+                <h2>Optimization Preview</h2>
+                <div id="optimization-results" class="results-container">
+                    <p>Run optimization to see recommended light settings for your zones.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Progress Modal -->
+    <div id="progress-modal" class="modal">
+        <div class="modal-content">
+            <h3>Calibration in Progress</h3>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <p id="progress-text">Initializing...</p>
+            <button id="btn-cancel-calibration" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Calibration-specific JavaScript
+        let calibrationInProgress = false;
+
+        // Auto-refresh sensor readings
+        function refreshSensorReadings() {
+            fetch('/api/light-sensors')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.readings) {
+                        for (const [sensorId, reading] of Object.entries(data.readings)) {
+                            const element = document.getElementById(`reading-${sensorId}`);
+                            if (element) {
+                                const luxValue = reading.lux !== null ? `${reading.lux.toFixed(1)} lux` : 'No data';
+                                element.querySelector('.lux-value').textContent = luxValue;
+                            }
+                        }
+                    }
+                })
+                .catch(error => console.error('Error refreshing sensors:', error));
+        }
+
+        // Measure baseline
+        document.getElementById('btn-measure-baseline').addEventListener('click', function() {
+            if (calibrationInProgress) return;
+            
+            this.disabled = true;
+            this.textContent = 'Measuring...';
+            
+            fetch('/api/calibration/baseline', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Baseline measured successfully!');
+                        console.log('Baseline:', data.baseline);
+                    } else {
+                        alert('Error measuring baseline: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.textContent = 'Measure Baseline';
+                });
+        });
+
+        // Full calibration
+        document.getElementById('btn-full-calibration').addEventListener('click', function() {
+            if (calibrationInProgress) return;
+            
+            if (!confirm('Full calibration will take several minutes. Continue?')) return;
+            
+            calibrationInProgress = true;
+            showProgressModal();
+            
+            fetch('/api/calibration/start', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Calibration completed successfully!');
+                        location.reload(); // Refresh page to show results
+                    } else {
+                        alert('Calibration failed: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    calibrationInProgress = false;
+                    hideProgressModal();
+                });
+        });
+
+        // Optimize lights
+        document.getElementById('btn-optimize-lights').addEventListener('click', function() {
+            const method = document.getElementById('optimization-method').value;
+            const apply = document.getElementById('apply-optimization').checked;
+            
+            this.disabled = true;
+            this.textContent = 'Optimizing...';
+            
+            fetch('/api/calibration/optimize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method: method, apply: apply })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayOptimizationResults(data.optimal_lights);
+                        if (apply) {
+                            alert('Lights optimized and applied!');
+                        } else {
+                            alert('Optimization complete! Check preview below.');
+                        }
+                    } else {
+                        alert('Optimization failed: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.textContent = 'Optimize for Zones';
+                });
+        });
+
+        // Adaptive calibration
+        document.getElementById('btn-adaptive-calibration').addEventListener('click', function() {
+            if (calibrationInProgress) return;
+            
+            if (!confirm('Adaptive calibration will analyze zone capabilities and optimize accordingly. Continue?')) return;
+            
+            this.disabled = true;
+            this.textContent = 'Running Adaptive Calibration...';
+            calibrationInProgress = true;
+            showProgressModal();
+            updateProgress(10, 'Analyzing zone capabilities...');
+            
+            fetch('/api/calibration/adaptive', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateProgress(100, 'Adaptive calibration complete!');
+                        setTimeout(() => {
+                            alert('Adaptive calibration completed successfully!');
+                            displayAdaptiveResults(data.results);
+                            location.reload(); // Refresh to show updated data
+                        }, 1000);
+                    } else {
+                        alert('Adaptive calibration failed: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    calibrationInProgress = false;
+                    hideProgressModal();
+                    this.disabled = false;
+                    this.textContent = 'Adaptive Calibration';
+                });
+        });
+
+        // Check zone capabilities
+        document.getElementById('btn-check-capabilities').addEventListener('click', function() {
+            this.disabled = true;
+            this.textContent = 'Checking...';
+            
+            fetch('/api/calibration/capabilities')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayCapabilities(data.capabilities);
+                    } else {
+                        alert('Error checking capabilities: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.textContent = 'Check Capabilities';
+                });
+        });
+
+        // Check ambient conditions
+        document.getElementById('btn-ambient-status').addEventListener('click', function() {
+            this.disabled = true;
+            this.textContent = 'Checking...';
+            
+            fetch('/api/calibration/ambient-status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayAmbientStatus(data);
+                    } else {
+                        alert('Error checking ambient status: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.textContent = 'Check Ambient Conditions';
+                });
+        });
+
+        // Ambient-aware calibration
+        document.getElementById('btn-ambient-aware').addEventListener('click', function() {
+            if (calibrationInProgress) return;
+            
+            if (!confirm('Ambient-aware calibration will check lighting conditions and adapt accordingly. Continue?')) return;
+            
+            this.disabled = true;
+            this.textContent = 'Checking Conditions...';
+            calibrationInProgress = true;
+            showProgressModal();
+            updateProgress(10, 'Analyzing ambient light conditions...');
+            
+            fetch('/api/calibration/ambient-aware', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.deferred) {
+                            updateProgress(100, 'Calibration deferred due to ambient conditions');
+                            setTimeout(() => {
+                                alert('Calibration deferred: Poor ambient light conditions. Check recommendations in results.');
+                                displayAmbientResults(data.results);
+                            }, 1000);
+                        } else {
+                            updateProgress(100, 'Ambient-aware calibration complete!');
+                            setTimeout(() => {
+                                alert('Ambient-aware calibration completed successfully!');
+                                displayAmbientResults(data.results);
+                                location.reload(); // Refresh to show updated data
+                            }, 1000);
+                        }
+                    } else {
+                        alert('Ambient-aware calibration failed: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    calibrationInProgress = false;
+                    hideProgressModal();
+                    this.disabled = false;
+                    this.textContent = 'Ambient-Aware Calibration';
+                });
+        });
+
+        // All lights off
+        document.getElementById('btn-all-lights-off').addEventListener('click', function() {
+            if (confirm('Turn off all lights?')) {
+                fetch('/api/lights/control/all/off')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('All lights turned off');
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    });
+            }
+        });
+
+        // Individual light controls
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('light-on') || e.target.classList.contains('light-off')) {
+                const lightId = e.target.dataset.lightId;
+                const action = e.target.classList.contains('light-on') ? 'on' : 'off';
+                
+                fetch(`/api/lights/control/${lightId}/${action}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            updateLightStatus(lightId, action);
+                        } else {
+                            alert('Error controlling light: ' + data.error);
+                        }
+                    });
+            }
+            
+            if (e.target.classList.contains('light-calibrate')) {
+                const lightId = e.target.dataset.lightId;
+                calibrateIndividualLight(lightId);
+            }
+        });
+
+        // Calibrate individual light
+        function calibrateIndividualLight(lightId) {
+            if (calibrationInProgress) return;
+            
+            const button = document.querySelector(`[data-light-id="${lightId}"].light-calibrate`);
+            button.disabled = true;
+            button.textContent = 'Calibrating...';
+            
+            fetch(`/api/calibration/light/${lightId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Light ${lightId} calibrated successfully!`);
+                        console.log('Effect:', data.light_effect);
+                    } else {
+                        alert('Calibration failed: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                })
+                .finally(() => {
+                    button.disabled = false;
+                    button.textContent = 'Calibrate';
+                });
+        }
+
+        // Update light status display
+        function updateLightStatus(lightId, status) {
+            const statusElement = document.getElementById(`status-${lightId}`);
+            if (statusElement) {
+                statusElement.textContent = status.toUpperCase();
+                statusElement.className = `light-status ${status}`;
+            }
+        }
+
+        // Display optimization results
+        function displayOptimizationResults(optimalLights) {
+            const container = document.getElementById('optimization-results');
+            let html = '<h3>Recommended Light Settings</h3><div class="optimization-grid">';
+            
+            for (const [lightId, shouldBeOn] of Object.entries(optimalLights)) {
+                const lightName = getLightName(lightId);
+                const status = shouldBeOn ? 'ON' : 'OFF';
+                const statusClass = shouldBeOn ? 'on' : 'off';
+                
+                html += `
+                    <div class="optimization-item">
+                        <span class="light-name">${lightName}</span>
+                        <span class="light-recommendation ${statusClass}">${status}</span>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // Get light name from ID
+        function getLightName(lightId) {
+            const lightsData = {{ lights.lights | tojson | safe }};
+            return lightsData[lightId] ? lightsData[lightId].name : lightId;
+        }
+
+        // Display adaptive calibration results
+        function displayAdaptiveResults(results) {
+            const container = document.getElementById('optimization-results');
+            let html = '<h3>Adaptive Calibration Results</h3>';
+            
+            // Overall summary
+            const summary = results.overall_summary || {};
+            html += `<div class="adaptive-summary">
+                <p><strong>Optimization Quality:</strong> ${summary.optimization_quality || 'Unknown'}</p>
+                <p><strong>Success Rate:</strong> ${Math.round((summary.success_rate || 0) * 100)}%</p>
+                <p><strong>Total Power:</strong> ${summary.total_power_consumption || 0}W</p>
+                <p><strong>Lights Activated:</strong> ${summary.total_lights_activated || 0}</p>
+            </div>`;
+            
+            // Zone results
+            if (results.zone_results) {
+                html += '<div class="zone-results">';
+                for (const [zoneKey, zoneResult] of Object.entries(results.zone_results)) {
+                    const strategy = zoneResult.strategy_used || 'unknown';
+                    const success = zoneResult.success ? 'Success' : 'Failed';
+                    const confidence = Math.round((zoneResult.accuracy_metrics?.confidence_score || 0) * 100);
+                    
+                    html += `
+                        <div class="zone-result-card">
+                            <h4>Zone: ${zoneKey}</h4>
+                            <p><strong>Strategy:</strong> ${strategy.replace(/_/g, ' ').toUpperCase()}</p>
+                            <p><strong>Status:</strong> <span class="${zoneResult.success ? 'success' : 'error'}">${success}</span></p>
+                            <p><strong>Confidence:</strong> ${confidence}%</p>
+                            ${zoneResult.limitations && zoneResult.limitations.length > 0 ? 
+                                `<p><strong>Limitations:</strong> ${zoneResult.limitations.join(', ')}</p>` : ''}
+                        </div>
+                    `;
+                }
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // Display zone capabilities
+        function displayCapabilities(capabilities) {
+            const container = document.getElementById('capabilities-container');
+            let html = '';
+            
+            if (capabilities.zones) {
+                html += '<div class="capabilities-grid">';
+                for (const [zoneKey, zoneCapabilities] of Object.entries(capabilities.zones)) {
+                    const sensorCaps = zoneCapabilities.sensor_capabilities || {};
+                    const lightCaps = zoneCapabilities.light_capabilities || {};
+                    
+                    html += `
+                        <div class="capability-card">
+                            <h4>Zone: ${zoneKey}</h4>
+                            <div class="capability-section">
+                                <h5>Sensors</h5>
+                                <p><strong>Count:</strong> ${sensorCaps.count || 0}</p>
+                                <p><strong>Types:</strong> ${(sensorCaps.types || []).join(', ') || 'None'}</p>
+                                <p><strong>Spectral:</strong> ${sensorCaps.has_spectral ? 'Yes' : 'No'}</p>
+                                <p><strong>Color:</strong> ${sensorCaps.supports_color ? 'Yes' : 'No'}</p>
+                            </div>
+                            <div class="capability-section">
+                                <h5>Lights</h5>
+                                <p><strong>Count:</strong> ${lightCaps.count || 0}</p>
+                                <p><strong>Types:</strong> ${(lightCaps.types || []).join(', ') || 'None'}</p>
+                                <p><strong>Variable Color:</strong> ${lightCaps.has_variable_color ? 'Yes' : 'No'}</p>
+                                <p><strong>Total Power:</strong> ${lightCaps.total_power || 0}W</p>
+                            </div>
+                            <div class="optimization-level">
+                                <strong>Optimization Level:</strong> 
+                                <span class="level-${zoneCapabilities.optimization_level || 'basic'}">
+                                    ${(zoneCapabilities.optimization_level || 'basic').toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+            } else {
+                html = '<p>No zone capability data available.</p>';
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // Display ambient light status
+        function displayAmbientStatus(data) {
+            const container = document.getElementById('ambient-container');
+            const status = data.ambient_status;
+            const recommendation = data.calibration_recommendation;
+            const readings = data.current_readings;
+            
+            let html = `
+                <div class="ambient-status-grid">
+                    <div class="ambient-card">
+                        <h4>🌅 Current Conditions</h4>
+                        <p><strong>Light Level:</strong> <span class="level-${status.level}">${status.level.toUpperCase()}</span></p>
+                        <p><strong>Average Lux:</strong> ${status.average_lux.toFixed(1)} lux</p>
+                        <p><strong>Variation:</strong> ${(status.variation_coefficient * 100).toFixed(1)}%</p>
+                        <p><strong>Time of Day:</strong> ${status.time_of_day.replace('_', ' ')}</p>
+                        <p><strong>Weather:</strong> ${status.weather_condition.replace('_', ' ')}</p>
+                    </div>
+                    
+                    <div class="ambient-card">
+                        <h4>🎯 Calibration Feasibility</h4>
+                        <div class="feasibility-meter">
+                            <div class="meter-bar">
+                                <div class="meter-fill" style="width: ${status.calibration_feasibility * 100}%"></div>
+                            </div>
+                            <span class="meter-value">${(status.calibration_feasibility * 100).toFixed(0)}%</span>
+                        </div>
+                        <p><strong>Strategy:</strong> ${status.recommended_strategy.replace('_', ' ')}</p>
+                        <p><strong>Should Calibrate:</strong> 
+                            <span class="${recommendation.should_calibrate ? 'success' : 'warning'}">
+                                ${recommendation.should_calibrate ? '✅ YES' : '❌ NO'}
+                            </span>
+                        </p>
+                        <p><strong>Reason:</strong> ${recommendation.reason}</p>
+                    </div>
+                    
+                    <div class="ambient-card">
+                        <h4>📊 Sensor Readings</h4>
+            `;
+            
+            for (const [sensorId, lux] of Object.entries(readings)) {
+                const luxValue = lux !== null ? `${lux.toFixed(1)} lux` : 'No data';
+                html += `<p><strong>${sensorId}:</strong> ${luxValue}</p>`;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            if (!recommendation.should_calibrate) {
+                html += `
+                    <div class="ambient-recommendations">
+                        <h4>💡 Recommendations</h4>
+                        <ul>
+                            <li>Wait for evening/night conditions for best results</li>
+                            <li>Consider using blackout covers during bright periods</li>
+                            <li>Schedule automatic calibration during optimal times</li>
+                            <li>Use differential calibration mode if needed urgently</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // Display ambient calibration results
+        function displayAmbientResults(results) {
+            const container = document.getElementById('optimization-results');
+            let html = '<h3>Ambient-Aware Calibration Results</h3>';
+            
+            if (results.calibration_type === 'ambient_aware_deferred') {
+                html += `
+                    <div class="deferred-calibration">
+                        <h4>🚫 Calibration Deferred</h4>
+                        <p><strong>Reason:</strong> ${results.ambient_analysis.reason}</p>
+                        
+                        <div class="recommendations-section">
+                            <h5>📅 Best Times for Calibration:</h5>
+                            <ul>
+                `;
+                
+                if (results.recommendations && results.recommendations.best_times) {
+                    results.recommendations.best_times.forEach(time => {
+                        html += `<li>${time}</li>`;
+                    });
+                }
+                
+                html += `
+                            </ul>
+                            
+                            <h5>⚠️ Times to Avoid:</h5>
+                            <ul>
+                `;
+                
+                if (results.recommendations && results.recommendations.avoid_times) {
+                    results.recommendations.avoid_times.forEach(time => {
+                        html += `<li>${time}</li>`;
+                    });
+                }
+                
+                html += '</ul></div></div>';
+            } else {
+                // Show successful calibration results
+                const ambient = results.ambient_conditions || {};
+                const quality = results.quality_metrics || {};
+                
+                html += `
+                    <div class="ambient-calibration-success">
+                        <h4>✅ Calibration Completed</h4>
+                        <p><strong>Ambient Level:</strong> ${ambient.level || 'unknown'}</p>
+                        <p><strong>Feasibility:</strong> ${(ambient.feasibility * 100).toFixed(0)}%</p>
+                        <p><strong>Overall Quality:</strong> ${(quality.overall_quality * 100).toFixed(0)}%</p>
+                        <p><strong>Detection Rate:</strong> ${(quality.detection_rate * 100).toFixed(0)}%</p>
+                        <p><strong>Signal-to-Noise:</strong> ${quality.signal_to_noise_ratio?.toFixed(1) || 'N/A'}</p>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // Progress modal functions
+        function showProgressModal() {
+            document.getElementById('progress-modal').style.display = 'flex';
+            updateProgress(0, 'Starting calibration...');
+        }
+
+        function hideProgressModal() {
+            document.getElementById('progress-modal').style.display = 'none';
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progress-fill').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = text;
+        }
+
+        // Refresh sensors button
+        document.getElementById('btn-refresh-sensors').addEventListener('click', refreshSensorReadings);
+
+        // Load calibration quality on page load
+        window.addEventListener('load', function() {
+            refreshSensorReadings();
+            
+            // Load calibration quality
+            fetch('/api/calibration/quality')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.quality) {
+                        const score = data.quality.overall_quality || 0;
+                        document.getElementById('quality-score').textContent = 
+                            (score * 100).toFixed(1) + '%';
+                    }
+                })
+                .catch(error => console.error('Error loading quality:', error));
+        });
+
+        // Auto-refresh sensor readings every 10 seconds
+        setInterval(refreshSensorReadings, 10000);
+    </script>
+
+    <style>
+        /* Calibration-specific styles */
+        .calibration-status .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .status-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .status-card h3 {
+            margin: 0 0 0.5rem 0;
+            color: #333;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .status-card p {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2563eb;
+        }
+
+        .quick-actions {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .optimization-options {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .lights-grid, .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .light-card, .sensor-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .light-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .light-status {
+            margin-top: 0.5rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .light-status.on {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .light-status.off {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .sensor-reading {
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .lux-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2563eb;
+        }
+
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.5rem;
+            text-align: center;
+        }
+
+        .matrix-table th {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
+
+        .effect-cell {
+            position: relative;
+        }
+
+        .effect-cell[data-effect]:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .optimization-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .optimization-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .light-recommendation.on {
+            color: #166534;
+            font-weight: bold;
+        }
+
+        .light-recommendation.off {
+            color: #991b1b;
+            font-weight: bold;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #2563eb;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+            padding: 2rem;
+        }
+
+        /* Adaptive Calibration Styles */
+        .zone-capabilities {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .capabilities-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .capability-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #f9fafb;
+        }
+
+        .capability-card h4 {
+            margin: 0 0 1rem 0;
+            color: #1f2937;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .capability-section {
+            margin-bottom: 1rem;
+        }
+
+        .capability-section h5 {
+            margin: 0 0 0.5rem 0;
+            color: #374151;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .capability-section p {
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+
+        .optimization-level {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+        }
+
+        .level-basic {
+            color: #d97706;
+            background: #fef3c7;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-intermediate {
+            color: #2563eb;
+            background: #dbeafe;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-advanced {
+            color: #059669;
+            background: #d1fae5;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .adaptive-summary {
+            background: #f3f4f6;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .zone-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .zone-result-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1rem;
+            background: white;
+        }
+
+        .zone-result-card h4 {
+            margin: 0 0 1rem 0;
+            color: #1f2937;
+        }
+
+        .zone-result-card p {
+            margin: 0.5rem 0;
+        }
+
+        .zone-result-card .success {
+            color: #059669;
+            font-weight: bold;
+        }
+
+        .zone-result-card .error {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        .btn-info {
+            background-color: #06b6d4;
+            color: white;
+            border: 1px solid #06b6d4;
+        }
+
+        .btn-info:hover {
+            background-color: #0891b2;
+            border-color: #0891b2;
+        }
+
+        .btn-warning {
+            background-color: #f59e0b;
+            color: white;
+            border: 1px solid #f59e0b;
+        }
+
+        .btn-warning:hover {
+            background-color: #d97706;
+            border-color: #d97706;
+        }
+
+        /* Ambient Light Styles */
+        .ambient-status {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .ambient-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .ambient-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #f9fafb;
+        }
+
+        .ambient-card h4 {
+            margin: 0 0 1rem 0;
+            color: #1f2937;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .level-dark {
+            color: #374151;
+            background: #f3f4f6;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-dim {
+            color: #4b5563;
+            background: #e5e7eb;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-moderate {
+            color: #d97706;
+            background: #fef3c7;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-bright {
+            color: #dc2626;
+            background: #fee2e2;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .level-very_bright {
+            color: #991b1b;
+            background: #fecaca;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .feasibility-meter {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .meter-bar {
+            flex: 1;
+            height: 20px;
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .meter-fill {
+            height: 100%;
+            background: linear-gradient(to right, #dc2626, #f59e0b, #059669);
+            transition: width 0.3s ease;
+        }
+
+        .meter-value {
+            font-weight: bold;
+            min-width: 3rem;
+        }
+
+        .ambient-recommendations {
+            background: #fef3c7;
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .ambient-recommendations h4 {
+            margin: 0 0 0.5rem 0;
+            color: #92400e;
+        }
+
+        .ambient-recommendations ul {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+
+        .ambient-recommendations li {
+            margin: 0.25rem 0;
+            color: #92400e;
+        }
+
+        .deferred-calibration {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .deferred-calibration h4 {
+            color: #991b1b;
+            margin: 0 0 1rem 0;
+        }
+
+        .ambient-calibration-success {
+            background: #d1fae5;
+            border: 1px solid #6ee7b7;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .ambient-calibration-success h4 {
+            color: #065f46;
+            margin: 0 0 1rem 0;
+        }
+
+        .recommendations-section {
+            margin-top: 1rem;
+        }
+
+        .recommendations-section h5 {
+            color: #991b1b;
+            margin: 1rem 0 0.5rem 0;
+        }
+
+        .recommendations-section ul {
+            margin: 0 0 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .recommendations-section li {
+            margin: 0.25rem 0;
+            color: #7f1d1d;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .optimization-options {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .lights-grid, .sensors-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>

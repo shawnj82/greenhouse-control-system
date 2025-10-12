@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone Configuration - Crane Creek Greenhouse</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>🌱 Zone Configuration</h1>
+        <nav>
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/zones" class="nav-link active">Zones</a>
+            <a href="/lights" class="nav-link">Lights</a>
+            <a href="/calibration" class="nav-link">Calibration</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="zone-config">
+            <h2>Greenhouse Layout Editor</h2>
+            <p>Click on cells to configure what's growing in each square foot area.</p>
+            <p><strong>Scale:</strong> Each square represents 1 square foot (1' × 1') of growing space.</p>
+            
+            <div class="grid-controls">
+                <label>Grid Size: 
+                    <input type="number" id="gridRows" min="2" max="10" value="{{ zones.grid_size.rows }}"> rows ×
+                    <input type="number" id="gridCols" min="2" max="15" value="{{ zones.grid_size.cols }}"> columns
+                </label>
+                <button onclick="resizeGrid()" class="btn btn-primary">Resize Grid</button>
+                <button onclick="saveZones()" class="btn btn-success">Save Configuration</button>
+                <label style="margin-left:1rem; display:inline-flex; align-items:center; gap:0.4rem;">
+                    <input type="checkbox" id="multiSelectToggle" onchange="toggleMultiSelectMode(this.checked)">
+                    Multi-select
+                </label>
+            </div>
+
+            <div id="greenhouse-grid" class="grid-container editable">
+                <!-- Grid will be populated by JavaScript -->
+            </div>
+            
+            <div class="scale-indicator">
+                <div class="scale-box"></div>
+                <span>1 ft²</span>
+            </div>
+        </section>
+
+        <!-- Zone Configuration Panel -->
+        <section class="zone-details" id="zoneDetails" style="display: none;">
+            <h3>Configure Zone(s) <span id="selectedZone"></span></h3>
+            <form id="zoneForm">
+                <div class="form-group">
+                    <label for="cropType">Crop Type:</label>
+                    <select id="cropType">
+                        <option value="">-- Select Crop --</option>
+                        <option value="lettuce">Lettuce</option>
+                        <option value="tomato">Tomato</option>
+                        <option value="basil">Basil</option>
+                        <option value="pepper">Pepper</option>
+                        <option value="cucumber">Cucumber</option>
+                        <option value="spinach">Spinach</option>
+                        <option value="kale">Kale</option>
+                        <option value="herbs">Mixed Herbs</option>
+                        <option value="strawberry">Strawberry</option>
+                        <option value="marigold">Marigold</option>
+                        <option value="petunia">Petunia</option>
+                        <option value="zinnia">Zinnia</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group" id="stageGroup" style="display:none;">
+                    <label for="cropStage">Stage:</label>
+                    <select id="cropStage">
+                        <!-- dynamically populated -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="customCrop">Custom Crop Name:</label>
+                    <input type="text" id="customCrop" placeholder="Enter custom crop name">
+                </div>
+
+                <div class="form-group">
+                    <label for="plantedDate">Planted Date:</label>
+                    <input type="date" id="plantedDate">
+                </div>
+
+                <div class="form-group">
+                    <label for="waterNeeds">Water Frequency (days):</label>
+                    <input type="number" id="waterNeeds" min="1" max="14" value="2">
+                </div>
+
+                <div class="form-group">
+                    <label for="lightHours">Light Hours per Day:</label>
+                    <input type="number" id="lightHours" min="0" max="24" value="12">
+                </div>
+
+                <div class="form-group">
+                    <label for="tempRange">Temperature Range (°C):</label>
+                    <input type="number" id="tempMin" placeholder="Min" value="18"> - 
+                    <input type="number" id="tempMax" placeholder="Max" value="24">
+                </div>
+
+                <div class="form-group">
+                    <label>Light Spectrum Configuration:</label>
+                    <div class="spectrum-controls">
+                        <div class="spectrum-input">
+                            <label for="redPercent">Red (%):</label>
+                            <input type="number" id="redPercent" min="0" max="100" value="35" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-input">
+                            <label for="bluePercent">Blue (%):</label>
+                            <input type="number" id="bluePercent" min="0" max="100" value="25" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-input">
+                            <label for="whitePercent">White (%):</label>
+                            <input type="number" id="whitePercent" min="0" max="100" value="40" class="spectrum-slider">
+                        </div>
+                        <div class="spectrum-input">
+                            <label for="parTarget">PAR Target (μmol/m²/s):</label>
+                            <input type="number" id="parTarget" min="50" max="800" value="200">
+                        </div>
+                        <div class="spectrum-total">
+                            Total: <span id="spectrumTotal">100</span>%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Notes:</label>
+                    <textarea id="notes" rows="3" placeholder="Special care instructions..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" onclick="applyZoneConfig()" class="btn btn-success">Apply to Selection</button>
+                    <button type="button" onclick="clearZone()" class="btn btn-warning">Clear Selection</button>
+                    <button type="button" onclick="closeZoneConfig()" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        // Only set selectedZoneKey and run DOMContentLoaded logic, do not redeclare currentZones
+        let selectedZoneKey = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial grid size from loaded data
+            gridSize = currentZones.grid_size || { rows: 4, cols: 6 };
+            
+            // Update grid size inputs
+            const gridRowsInput = document.getElementById('gridRows');
+            const gridColsInput = document.getElementById('gridCols');
+            if (gridRowsInput) gridRowsInput.value = gridSize.rows;
+            if (gridColsInput) gridColsInput.value = gridSize.cols;
+            
+            // Load grid immediately in editing mode
+            renderGrid(true);
+
+            // Wire crop/stage handlers if present on this page
+            const cropSelect = document.getElementById('cropType');
+            const stageSelect = document.getElementById('cropStage');
+            if (cropSelect) {
+                cropSelect.addEventListener('change', handleCropChange);
+            }
+            if (stageSelect) {
+                stageSelect.addEventListener('change', handleStageChange);
+            }
+        });
+    </script>
+</body>
+</html>

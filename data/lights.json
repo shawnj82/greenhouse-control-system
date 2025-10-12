@@ -1,0 +1,115 @@
+{
+  "lights": {
+    "led_strip_1": {
+      "name": "Full Spectrum LED Strip 1",
+      "type": "LED_STRIP",
+      "position": {
+        "row": 1,
+        "col": 1
+      },
+      "zone_key": "A1",
+      "gpio_pin": 18,
+      "power_watts": 45,
+      "spectrum": {
+        "color_temperature": 4000,
+        "blue_percent": 25,
+        "green_percent": 35,
+        "red_percent": 40,
+        "has_variable_color": true,
+        "spectral_channels": [
+          "blue",
+          "green",
+          "red",
+          "white"
+        ]
+      }
+    },
+    "grow_panel_1": {
+      "name": "High-Power Grow Panel 1",
+      "type": "GROW_PANEL",
+      "position": {
+        "row": 1,
+        "col": 2
+      },
+      "zone_key": "A2",
+      "gpio_pin": 19,
+      "power_watts": 100,
+      "spectrum": {
+        "color_temperature": 3500,
+        "blue_percent": 20,
+        "green_percent": 30,
+        "red_percent": 50,
+        "has_variable_color": false,
+        "spectral_channels": [
+          "red",
+          "blue"
+        ]
+      }
+    },
+    "basic_light_1": {
+      "name": "Basic White LED 1",
+      "type": "LED_BASIC",
+      "position": {
+        "row": 2,
+        "col": 1
+      },
+      "zone_key": "B1",
+      "gpio_pin": 20,
+      "power_watts": 25,
+      "spectrum": {
+        "color_temperature": 5000,
+        "blue_percent": 15,
+        "green_percent": 45,
+        "red_percent": 40,
+        "has_variable_color": false,
+        "spectral_channels": [
+          "white"
+        ]
+      }
+    },
+    "rgb_light_1": {
+      "name": "RGB LED Array 1",
+      "type": "RGB_ARRAY",
+      "position": {
+        "row": 2,
+        "col": 2
+      },
+      "zone_key": "B2",
+      "gpio_pin": 21,
+      "power_watts": 60,
+      "spectrum": {
+        "color_temperature": 4500,
+        "blue_percent": 33,
+        "green_percent": 33,
+        "red_percent": 34,
+        "has_variable_color": true,
+        "spectral_channels": [
+          "red",
+          "green",
+          "blue"
+        ]
+      }
+    },
+    "backup_light_1": {
+      "name": "Backup White Light",
+      "type": "LED_BASIC",
+      "position": {
+        "row": 1,
+        "col": 3
+      },
+      "zone_key": null,
+      "gpio_pin": 22,
+      "power_watts": 30,
+      "spectrum": {
+        "color_temperature": 4000,
+        "blue_percent": 20,
+        "green_percent": 40,
+        "red_percent": 40,
+        "has_variable_color": false,
+        "spectral_channels": [
+          "white"
+        ]
+      }
+    }
+  }
+}

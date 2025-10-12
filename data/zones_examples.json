@@ -1,0 +1,112 @@
+{
+  "zones": {
+    "zone_lettuce_01": {
+      "description": "Lettuce bed 1 - buttercrunch variety",
+      "crop": {
+        "type": "lettuce",
+        "variety": "buttercrunch",
+        "growth_stage": "vegetative",
+        "planted_date": "2025-10-01",
+        "expected_harvest": "2025-11-15"
+      },
+      "location": {
+        "shelf": "upper",
+        "position": "left_side"
+      },
+      "target_conditions": {
+        "light_hours": 14,
+        "optimal_par": 180
+      }
+    },
+    "zone_flowers_01": {
+      "description": "Flowering plants - petunias and marigolds",
+      "crop": {
+        "type": "flowers",
+        "variety": "mixed_annuals", 
+        "growth_stage": "flowering",
+        "planted_date": "2025-09-15",
+        "expected_harvest": "2025-12-01"
+      },
+      "location": {
+        "shelf": "upper",
+        "position": "right_side"
+      },
+      "target_conditions": {
+        "light_hours": 12,
+        "optimal_par": 400
+      }
+    },
+    "zone_herbs_01": {
+      "description": "Herb garden - basil and oregano",
+      "crop": {
+        "type": "herbs",
+        "variety": "culinary_mix",
+        "growth_stage": "vegetative",
+        "planted_date": "2025-09-20",
+        "expected_harvest": "2025-11-01"
+      },
+      "location": {
+        "shelf": "middle",
+        "position": "left_side"
+      },
+      "target_conditions": {
+        "light_hours": 14,
+        "optimal_par": 150
+      }
+    },
+    "zone_tomatoes_01": {
+      "description": "Cherry tomato plants in fruiting stage",
+      "crop": {
+        "type": "tomatoes",
+        "variety": "cherry",
+        "growth_stage": "fruiting", 
+        "planted_date": "2025-08-01",
+        "expected_harvest": "2025-11-30"
+      },
+      "location": {
+        "shelf": "lower",
+        "position": "center"
+      },
+      "target_conditions": {
+        "light_hours": 12,
+        "optimal_par": 600
+      }
+    },
+    "zone_lettuce_02": {
+      "description": "Lettuce bed 2 - romaine variety",
+      "crop": {
+        "type": "lettuce",
+        "variety": "romaine",
+        "growth_stage": "vegetative",
+        "planted_date": "2025-10-05",
+        "expected_harvest": "2025-11-20"
+      },
+      "location": {
+        "shelf": "middle",
+        "position": "center"
+      },
+      "target_conditions": {
+        "light_hours": 14,
+        "optimal_par": 180
+      }
+    },
+    "zone_lettuce_03": {
+      "description": "Lettuce bed 3 - mixed greens",
+      "crop": {
+        "type": "lettuce",
+        "variety": "mixed_greens",
+        "growth_stage": "vegetative", 
+        "planted_date": "2025-10-08",
+        "expected_harvest": "2025-11-25"
+      },
+      "location": {
+        "shelf": "middle", 
+        "position": "right_side"
+      },
+      "target_conditions": {
+        "light_hours": 14,
+        "optimal_par": 185
+      }
+    }
+  }
+}

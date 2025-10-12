@@ -1,0 +1,50 @@
+{
+  "relay_groups": {
+    "greenhouse_east_upper": {
+      "description": "East side upper shelf grow lights",
+      "relay_pin": 23,
+      "active_high": true,
+      "lights": [
+        "led_strip_1",
+        "grow_panel_1"
+      ],
+      "cost_reasoning": "Both lights serve same growing area and are rarely needed independently",
+      "power_total_watts": 145,
+      "created_date": "2025-10-12"
+    },
+    "seed_starting_area": {
+      "description": "Seed starting table lights",
+      "relay_pin": 24,
+      "active_high": true,
+      "lights": [
+        "basic_light_1",
+        "rgb_light_1"
+      ],
+      "cost_reasoning": "Small seedlings need consistent light, both lights work together",
+      "power_total_watts": 85,
+      "created_date": "2025-10-12"
+    }
+  },
+  "configuration_notes": {
+    "relay_sharing_benefits": [
+      "Reduced hardware cost - fewer relay boards needed",
+      "Simplified wiring for lights in same area", 
+      "Lower GPIO pin usage on Raspberry Pi",
+      "Suitable for lights that are always used together"
+    ],
+    "when_to_use_shared_relays": [
+      "Lights in same physical location/zone",
+      "Lights serving same crop/growth stage", 
+      "Backup/redundant lights that supplement each other",
+      "Cost-sensitive installations"
+    ],
+    "limitations": [
+      "All lights in group turn on/off together",
+      "No individual control within the group",
+      "Total power consumption must be within relay rating",
+      "Consider fuse/breaker protection for higher power groups"
+    ]
+  },
+  "last_updated": "2025-10-12T10:30:00",
+  "description": "Configuration for shared relay control of multiple lights"
+}
