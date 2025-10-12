@@ -837,6 +837,19 @@ pip install --force-reinstall --no-cache-dir smbus2
 pip install Adafruit_DHT RPi.GPIO smbus2 pyserial Flask numpy scipy
 ```
 
+**Import/Module Errors:**
+```bash
+# If you get "ModuleNotFoundError: No module named 'logging.logger'":
+# This is fixed in the latest version, but if you encounter it:
+# The issue is a naming conflict with Python's built-in logging module
+
+# Ensure you're using the latest code:
+git pull origin main
+
+# If still having issues, check Python path:
+python -c "import sys; print('\n'.join(sys.path))"
+```
+
 **I2C Sensor Problems:**
 ```bash
 # Check if I2C is enabled

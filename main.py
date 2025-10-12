@@ -9,11 +9,11 @@ from sensors.bh1750 import BH1750
 from sensors.soil_moisture import SoilMoisture
 from control.relay import Relay
 from control.fan_controller import FanController
-from logging.logger import Logger
+from logging import logger as log_module
 
 
 def main():
-    logger = Logger()
+    logger = log_module.Logger()
     dht = DHT22(pin=4)
     light = BH1750()
     soil = SoilMoisture()
