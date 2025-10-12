@@ -31,7 +31,7 @@
                 <h3>Grid Preview with Lights</h3>
                 <div class="layer-controls">
                     <label class="layer-toggle">
-                        <input type="checkbox" id="showLightsPreview" checked>
+                        <input type="checkbox" id="showLightFixtures" checked>
                         <span class="checkmark"></span>
                         Show Lights
                     </label>
@@ -209,11 +209,11 @@
             });
             
             // Add layer toggle listeners
-            const showLightsPreview = document.getElementById('showLightsPreview');
+            const showLightFixtures = document.getElementById('showLightFixtures');
             const showZonesPreview = document.getElementById('showZonesPreview');
             
-            if (showLightsPreview) {
-                showLightsPreview.addEventListener('change', function() {
+            if (showLightFixtures) {
+                showLightFixtures.addEventListener('change', function() {
                     renderLightsOverlay();
                 });
             }
@@ -245,7 +245,9 @@
                         <select data-field="type" value="${s.type || 'BH1750'}">
                             <option value="BH1750" ${s.type==='BH1750'?'selected':''}>BH1750</option>
                             <option value="TSL2561" ${s.type==='TSL2561'?'selected':''}>TSL2561</option>
+                            <option value="TSL2591" ${s.type==='TSL2591'?'selected':''}>TSL2591</option>
                             <option value="VEML7700" ${s.type==='VEML7700'?'selected':''}>VEML7700</option>
+                            <option value="TCS34725" ${s.type==='TCS34725'?'selected':''}>TCS34725</option>
                         </select>
                     </td>
                     <td>

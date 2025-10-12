@@ -1,80 +1,80 @@
 {
   "grid_size": {
-    "rows": 4,
-    "cols": 6
+    "rows": 24,
+    "cols": 12
   },
   "zones": {
     "A1": {
-      "name": "Lettuce Section",
       "crop_type": "lettuce",
+      "dli_config": {
+        "evening_end_time": "20:00",
+        "morning_start_time": "06:00",
+        "priority": "medium",
+        "target_dli": 14
+      },
       "growth_stage": "vegetative",
       "light_spectrum": {
-        "par_target": 180,
-        "color_temperature": 4000,
         "blue_percent": 25,
+        "color_temperature": 4000,
         "green_percent": 40,
+        "par_target": 180,
         "red_percent": 35
       },
-      "dli_config": {
-        "target_dli": 14.0,
-        "morning_start_time": "06:00",
-        "evening_end_time": "20:00",
-        "priority": "medium"
-      }
+      "name": "Lettuce Section"
     },
     "A2": {
-      "name": "Basil Garden",
       "crop_type": "basil",
+      "dli_config": {
+        "evening_end_time": "21:00",
+        "morning_start_time": "05:00",
+        "priority": "high",
+        "target_dli": 18
+      },
       "growth_stage": "flowering",
       "light_spectrum": {
-        "par_target": 220,
-        "color_temperature": 4500,
         "blue_percent": 30,
+        "color_temperature": 4500,
         "green_percent": 30,
+        "par_target": 220,
         "red_percent": 40
       },
-      "dli_config": {
-        "target_dli": 18.0,
-        "morning_start_time": "05:00",
-        "evening_end_time": "21:00",
-        "priority": "high"
-      }
+      "name": "Basil Garden"
     },
     "B1": {
-      "name": "Tomato Seedlings",
       "crop_type": "tomatoes",
+      "dli_config": {
+        "evening_end_time": "21:00",
+        "morning_start_time": "07:00",
+        "priority": "high",
+        "target_dli": 12
+      },
       "growth_stage": "seedling",
       "light_spectrum": {
-        "par_target": 150,
-        "color_temperature": 3800,
         "blue_percent": 35,
+        "color_temperature": 3800,
         "green_percent": 30,
+        "par_target": 150,
         "red_percent": 35
       },
-      "dli_config": {
-        "target_dli": 12.0,
-        "morning_start_time": "07:00",
-        "evening_end_time": "21:00",
-        "priority": "high"
-      }
+      "name": "Tomato Seedlings"
     },
     "B2": {
-      "name": "Mixed Herbs",
       "crop_type": "herbs",
+      "dli_config": {
+        "evening_end_time": "19:00",
+        "morning_start_time": "07:00",
+        "priority": "medium",
+        "target_dli": 12
+      },
       "growth_stage": "vegetative",
       "light_spectrum": {
-        "par_target": 160,
-        "color_temperature": 4200,
         "blue_percent": 28,
+        "color_temperature": 4200,
         "green_percent": 40,
+        "par_target": 160,
         "red_percent": 32
       },
-      "dli_config": {
-        "target_dli": 12.0,
-        "morning_start_time": "07:00",
-        "evening_end_time": "19:00",
-        "priority": "medium"
-      }
+      "name": "Mixed Herbs"
     }
   }
 }

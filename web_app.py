@@ -11,6 +11,7 @@ from sensors.tsl2561 import TSL2561
 from sensors.veml7700 import VEML7700
 from sensors.tsl2591 import TSL2591
 from sensors.soil_moisture import SoilMoisture
+from sensors.spectral_sensors import TCS34725Color
 from control.relay import Relay
 from control.fan_controller import FanController
 from control.light_calibration import LightCalibrator
@@ -226,6 +227,14 @@ def read_light_sensor(cfg):
             addr = cfg.get("connection", {}).get("address", 0x29)
             sensor = TSL2591(bus=bus, addr=addr)
             return {"lux": sensor.read_lux()}
+        elif stype == "TCS34725":
+            bus = cfg.get("connection", {}).get("bus", 1)
+            addr = cfg.get("connection", {}).get("address", TCS34725Color.DEFAULT_ADDR)
+            sensor = TCS34725Color(bus=bus, addr=addr)
+            color_data = sensor.read_color()
+            if color_data:
+                return {"lux": color_data.get("lux"), "color_temp_k": color_data.get("color_temperature_k")}
+            return {"lux": None}
         return {"lux": None}
     except Exception as e:
         return {"lux": None, "error": str(e)}

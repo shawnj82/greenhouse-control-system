@@ -351,8 +351,13 @@ function renderLightFixtures(overlay, container) {
         // Render each light fixture
         if (currentLights.lights) {
             Object.entries(currentLights.lights).forEach(([lightId, light]) => {
+                // Handle both old and new light data formats
+                const status = light.status || 'on';
+                const width = light.width_inches || 24;
+                const height = light.height_inches || 12;
+                
                 const lightElement = document.createElement('div');
-                lightElement.className = `light-fixture light-fixture-${light.status}`;
+                lightElement.className = `light-fixture light-fixture-${status}`;
                 lightElement.setAttribute('data-light-id', lightId);
                 
                 // Guard and clamp positions within grid
@@ -369,15 +374,15 @@ function renderLightFixtures(overlay, container) {
                 // Calculate position and size relative to overlay origin (padding edge)
                 const left = col * (cellWidth + colGap);
                 const top = row * (cellHeight + rowGap);
-                const width = clampedColSpan * cellWidth + (clampedColSpan - 1) * colGap;
-                const height = clampedRowSpan * cellHeight + (clampedRowSpan - 1) * rowGap;
+                const width_px = clampedColSpan * cellWidth + (clampedColSpan - 1) * colGap;
+                const height_px = clampedRowSpan * cellHeight + (clampedRowSpan - 1) * rowGap;
                 
                 lightElement.style.cssText = `
                     position: absolute;
                     left: ${left}px;
                     top: ${top}px;
-                    width: ${width}px;
-                    height: ${height}px;
+                    width: ${width_px}px;
+                    height: ${height_px}px;
                     z-index: 20;
                 `;
                 
@@ -385,8 +390,8 @@ function renderLightFixtures(overlay, container) {
                 lightElement.innerHTML = `
                     <div class="light-info">
                         <div class="light-name">${light.name}</div>
-                        <div class="light-specs">${light.width_inches}"×${light.height_inches}" | ${light.power_watts}W</div>
-                        <div class="light-status status-${light.status}">${light.status.toUpperCase()}</div>
+                        <div class="light-specs">${width}"×${height}" | ${light.power_watts}W</div>
+                        <div class="light-status status-${status}">${status.toUpperCase()}</div>
                     </div>
                 `;
                 
@@ -648,7 +653,8 @@ function getSpectrumColor(spectrum) {
 }
 
 function toggleLight(lightId, light) {
-    const newStatus = light.status === 'on' ? 'off' : 'on';
+    const currentStatus = light.status || 'on'; // Default to 'on' for old lights
+    const newStatus = currentStatus === 'on' ? 'off' : 'on';
     
     // Update local data
     currentLights.lights[lightId].status = newStatus;
@@ -1199,14 +1205,21 @@ function renderLightsTable() {
     `;
     
     Object.entries(currentLights.lights).forEach(([lightId, light]) => {
+        // Handle both old and new light data formats
+        const width = light.width_inches || 24;
+        const height = light.height_inches || 12;
+        const rowSpan = light.position.row_span || 1;
+        const colSpan = light.position.col_span || 1;
+        const status = light.status || 'on';
+        
         html += `
             <tr>
                 <td><strong>${light.name}</strong></td>
                 <td>${light.type}</td>
-                <td>${light.width_inches}"×${light.height_inches}"</td>
-                <td>R${light.position.row} C${light.position.col} (${light.position.row_span}×${light.position.col_span})</td>
+                <td>${width}"×${height}"</td>
+                <td>R${light.position.row} C${light.position.col} (${rowSpan}×${colSpan})</td>
                 <td>${light.power_watts}W</td>
-                <td><span class="status status-${light.status}">${light.status.toUpperCase()}</span></td>
+                <td><span class="status status-${status}">${status.toUpperCase()}</span></td>
                 <td>
                     <button onclick="editLight('${lightId}')" class="btn btn-sm btn-primary">Edit</button>
                     <button onclick="toggleLight('${lightId}', currentLights.lights['${lightId}'])" class="btn btn-sm btn-secondary">Toggle</button>
