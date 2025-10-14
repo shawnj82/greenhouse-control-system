@@ -604,7 +604,7 @@ input[type="range"] {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 10;
+    z-index: 25; /* above sensors and lights */
     display: grid;
 }
 
@@ -616,14 +616,102 @@ input[type="range"] {
 
 .light-amount-info {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    font-size: 0.7rem;
+    inset: 0; /* full area */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.9rem;
     font-weight: bold;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
     color: white;
     z-index: 11;
 }
+
+/* Sensor Reading Styles */
+.sensor-reading {
+    border-left: none;
+    padding-left: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+.sensor-reading .lux-value {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #2e7d32;
+}
+
+.sensor-reading .ppfd-value {
+    font-size: 0.6rem;
+    color: #388e3c;
+    margin-top: 1px;
+}
+
+.nearby-sensor-reading {
+    border-left: 3px solid #ff9800;
+    padding-left: 4px;
+    background: rgba(255, 152, 0, 0.1);
+    border-radius: 2px;
+}
+
+.nearby-sensor-reading .lux-value {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #e65100;
+}
+
+.nearby-sensor-reading .sensor-name {
+    font-size: 0.6rem;
+    color: #ff9800;
+    font-weight: 500;
+    margin-top: 1px;
+}
+
+.nearby-sensor-reading .ppfd-value {
+    font-size: 0.6rem;
+    color: #f57c00;
+    margin-top: 1px;
+}
+
+.simulated-reading {
+    border-left: 3px solid #9e9e9e;
+    padding-left: 4px;
+    background: rgba(158, 158, 158, 0.1);
+    border-radius: 2px;
+}
+
+.simulated-reading .lux-value {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #424242;
+}
+
+.simulated-reading .source-label {
+    font-size: 0.6rem;
+    color: #757575;
+    font-style: italic;
+    margin-top: 1px;
+}
+
+/* No data cells should be transparent to let the base grid show through */
+.light-amount-cell.no-data {
+    background: transparent !important;
+}
+
+.estimated-reading {
+    border-left: none;
+    padding-left: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+.estimated-reading .lux-value {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #1565c0;
+}
+
 
 /* Light intensity color mapping */
 .light-intensity-0 { background-color: rgba(0, 0, 0, 0.8); }      /* Very dark - no light */
@@ -728,6 +816,56 @@ input[type="range"] {
 /* Grid Container Position */
 .grid-container {
     position: relative;
+}
+
+/* Estimation controls styling */
+.estimation-controls {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+    background: #f4f8ff;
+    border: 1px solid #dbe7ff;
+    border-radius: 6px;
+}
+.estimation-controls .inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.estimation-controls .estimation-inputs {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 0.5rem 1rem;
+}
+.estimation-controls label {
+    font-size: 0.85rem;
+    color: #03396c;
+}
+.estimation-controls input[type="number"] {
+    width: 6rem;
+}
+
+/* Lux scaling controls styling */
+.lux-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+    background: #f7fbff;
+    border: 1px solid #d6ecff;
+    border-radius: 6px;
+}
+.lux-controls .lux-inputs {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 0.5rem 1rem;
+}
+.lux-controls input[type="number"] {
+    width: 7rem;
 }
 
 /* Lights Configuration Page */

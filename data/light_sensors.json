@@ -1,13 +1,13 @@
 {
   "sensors": {
-    "bh1750_1": {
-      "name": "Basic Light Sensor A1",
+    "ls-1760396125463": {
+      "name": "TCS34725 Sensor",
       "type": "TCS34725",
       "connection": {
         "bus": 1,
-        "address": 29
+        "address": 41
       },
-      "zone_key": "15-7"
+      "zone_key": "15-6"
     }
   }
 }

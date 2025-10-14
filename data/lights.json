@@ -1,52 +1,13 @@
 {
   "lights": {
-    "grow_panel_1": {
-      "gpio_pin": 19,
-      "name": "High-Power Grow Panel 1",
-      "position": {
-        "col": 2,
-        "row": 1
-      },
-      "power_watts": 100,
-      "spectrum": {
-        "blue_percent": 20,
-        "color_temperature": 3500,
-        "green_percent": 30,
-        "has_variable_color": false,
-        "red_percent": 50,
-        "spectral_channels": [
-          "red",
-          "blue"
-        ]
-      },
-      "type": "GROW_PANEL",
-      "zone_key": "A2"
-    },
-    "led_strip_1": {
-      "gpio_pin": 18,
-      "name": "Full Spectrum LED Strip 1",
-      "position": {
-        "col": 1,
-        "row": 1
-      },
-      "power_watts": 45,
-      "spectrum": {
-        "blue_percent": 25,
-        "color_temperature": 4000,
-        "green_percent": 35,
-        "has_variable_color": true,
-        "red_percent": 40,
-        "spectral_channels": [
-          "blue",
-          "green",
-          "red",
-          "white"
-        ]
-      },
-      "type": "LED_STRIP",
-      "zone_key": "A1"
-    },
     "light-1760295249804": {
+      "control": {
+        "active_low": false,
+        "description": "GPIO pin 17 for on/off control",
+        "pin": 17,
+        "type": "gpio"
+      },
+      "depth_inches": 12,
       "dimming_level": 100,
       "height_inches": 12,
       "name": "New Light Fixture",
@@ -66,29 +27,6 @@
       "status": "on",
       "type": "LED Panel",
       "width_inches": 24
-    },
-    "rgb_light_1": {
-      "gpio_pin": 21,
-      "name": "RGB LED Array 1",
-      "position": {
-        "col": 2,
-        "row": 2
-      },
-      "power_watts": 60,
-      "spectrum": {
-        "blue_percent": 33,
-        "color_temperature": 4500,
-        "green_percent": 33,
-        "has_variable_color": true,
-        "red_percent": 34,
-        "spectral_channels": [
-          "red",
-          "green",
-          "blue"
-        ]
-      },
-      "type": "RGB_ARRAY",
-      "zone_key": "B2"
     }
   }
 }

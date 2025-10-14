@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lights Configuration - Crane Creek Greenhouse</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .control-fields {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .control-fields label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .control-fields small {
+            color: #6c757d;
+            font-style: italic;
+            display: block;
+            margin-top: 3px;
+        }
+        .control-fields input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+        .control-fields .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .control-fields .form-row .form-group {
+            flex: 1;
+        }
+        .hardware-controls {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .hardware-controls h4 {
+            margin-top: 0;
+            color: #007bff;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -14,6 +57,7 @@
             <a href="/zones" class="nav-link">Zones</a>
             <a href="/lights" class="nav-link active">Lights</a>
             <a href="/calibration" class="nav-link">Calibration</a>
+            <a href="/settings" class="nav-link">Settings</a>
         </nav>
     </header>
 
@@ -87,14 +131,93 @@
                     </select>
                 </div>
 
+                <!-- Hardware Control Configuration -->
+                <div class="form-group">
+                    <label for="controlType">Hardware Control:</label>
+                    <select id="controlType" onchange="updateControlFields()">
+                        <option value="none">No Hardware Control (Software Only)</option>
+                        <option value="gpio">GPIO On/Off Control</option>
+                        <option value="pwm">PWM Dimming Control</option>
+                        <option value="rgb">RGB LED Control (3-pin)</option>
+                        <option value="i2c">I2C Device Control</option>
+                    </select>
+                </div>
+
+                <!-- GPIO Control Fields -->
+                <div id="gpioControls" class="control-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="gpioPin">GPIO Pin:</label>
+                        <input type="number" id="gpioPin" min="2" max="27" placeholder="e.g., 18">
+                        <small>BCM pin number for on/off control</small>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:8px; font-weight:normal;">
+                            <input type="checkbox" id="gpioActiveLow">
+                            Invert (active low)
+                        </label>
+                        <small>If your relay or driver turns ON when the pin is LOW, enable this.</small>
+                    </div>
+                </div>
+
+                <!-- PWM Control Fields -->
+                <div id="pwmControls" class="control-fields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="pwmPin">PWM Pin:</label>
+                            <input type="number" id="pwmPin" min="2" max="27" placeholder="e.g., 18">
+                        </div>
+                        <div class="form-group">
+                            <label for="pwmFrequency">Frequency (Hz):</label>
+                            <input type="number" id="pwmFrequency" min="100" max="10000" value="1000">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RGB Control Fields -->
+                <div id="rgbControls" class="control-fields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="redPin">Red Pin:</label>
+                            <input type="number" id="redPin" min="2" max="27" placeholder="e.g., 18">
+                        </div>
+                        <div class="form-group">
+                            <label for="greenPin">Green Pin:</label>
+                            <input type="number" id="greenPin" min="2" max="27" placeholder="e.g., 19">
+                        </div>
+                        <div class="form-group">
+                            <label for="bluePin">Blue Pin:</label>
+                            <input type="number" id="bluePin" min="2" max="27" placeholder="e.g., 20">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- I2C Control Fields -->
+                <div id="i2cControls" class="control-fields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="i2cAddress">I2C Address:</label>
+                            <input type="text" id="i2cAddress" placeholder="e.g., 0x40">
+                        </div>
+                        <div class="form-group">
+                            <label for="i2cBus">I2C Bus:</label>
+                            <input type="number" id="i2cBus" min="0" max="1" value="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="i2cDevice">Device Type:</label>
+                        <input type="text" id="i2cDevice" placeholder="e.g., PCA9685, MCP23017">
+                        <small>Device type for reference</small>
+                    </div>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="lightWidth">Width (inches):</label>
                         <input type="number" id="lightWidth" min="1" max="120" value="24">
                     </div>
                     <div class="form-group">
-                        <label for="lightHeight">Height (inches):</label>
-                        <input type="number" id="lightHeight" min="1" max="120" value="12">
+                        <label for="lightDepth">Depth (inches):</label>
+                        <input type="number" id="lightDepth" min="1" max="120" value="12">
                     </div>
                 </div>
 
@@ -178,6 +301,9 @@
         </section>
     </main>
 
+    <script>
+        window.userSettings = {{ user_settings | tojson }};
+    </script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script>
     // Initialize page globals using strings to avoid static analysis errors
@@ -228,6 +354,57 @@
             }
         });
 
+        // Hardware Control Field Management
+        function updateControlFields() {
+            const controlType = document.getElementById('controlType').value;
+            
+            // Hide all control field sections
+            const controlSections = ['gpioControls', 'pwmControls', 'rgbControls', 'i2cControls'];
+            controlSections.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.style.display = 'none';
+            });
+            
+            // Show relevant control fields
+            if (controlType === 'gpio') {
+                document.getElementById('gpioControls').style.display = 'block';
+            } else if (controlType === 'pwm') {
+                document.getElementById('pwmControls').style.display = 'block';
+            } else if (controlType === 'rgb') {
+                document.getElementById('rgbControls').style.display = 'block';
+            } else if (controlType === 'i2c') {
+                document.getElementById('i2cControls').style.display = 'block';
+            }
+        }
+
+        // Control individual lights via hardware
+        function controlLight(lightId, action, value = 100) {
+            const payload = { action: action };
+            if (action === 'dim' || action === 'color') {
+                payload.value = value;
+            }
+            
+            fetch(`/api/lights/${lightId}/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message || `Light ${action} successful`, 'success');
+                    renderLightsOverlay(); // Refresh display
+                    renderLightsTable();
+                } else {
+                    showNotification(`Light control failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification(`Control error: ${error}`, 'error');
+                console.error('Light control error:', error);
+            });
+        }
+
         function loadLightSensors() {
             fetch('/api/light-sensors').then(r => r.json()).then(data => {
                 currentLightSensors = data || { config: { sensors: {} }, readings: {} };
@@ -238,6 +415,15 @@
         function renderLightSensorsTable() {
             const container = document.getElementById('lightSensorsTable');
             const sensors = currentLightSensors?.config?.sensors || {};
+            
+            // Check if table already exists and we can just update readings
+            const existingTable = container.querySelector('table');
+            if (existingTable) {
+                updateSensorReadings();
+                return;
+            }
+            
+            // Full table rebuild (only when table doesn't exist)
             const rows = Object.entries(sensors).map(([id, s]) => `
                 <tr data-sensor-id="${id}">
                     <td><input value="${s.name || ''}" data-field="name"/></td>
@@ -260,8 +446,8 @@
                             ${getZoneOptions(s.zone_key)}
                         </select>
                     </td>
-                    <td>
-                        <span>${(currentLightSensors.readings && currentLightSensors.readings[id] && currentLightSensors.readings[id].lux != null) ? Math.round(currentLightSensors.readings[id].lux) + ' lux' : '—'}</span>
+                    <td class="reading-cell">
+                        <span>${getLuxReading(currentLightSensors.readings, id)}</span>
                     </td>
                     <td>
                         <button class="btn btn-danger" onclick="deleteLightSensor('${id}')">Delete</button>
@@ -282,6 +468,20 @@
             `;
         }
 
+        function updateSensorReadings() {
+            // Update only the reading cells without rebuilding the table
+            const tbody = document.querySelector('#lightSensorsTable tbody');
+            if (!tbody) return;
+            
+            tbody.querySelectorAll('tr').forEach(tr => {
+                const sensorId = tr.getAttribute('data-sensor-id');
+                const readingCell = tr.querySelector('.reading-cell span');
+                if (readingCell && sensorId) {
+                    readingCell.innerHTML = getLuxReading(currentLightSensors.readings, sensorId);
+                }
+            });
+        }
+
         window.addNewLightSensor = function() {
             const id = `ls-${Date.now()}`;
             if (!currentLightSensors.config) currentLightSensors.config = { sensors: {} };
@@ -290,7 +490,7 @@
                 name: 'New Sensor',
                 type: 'BH1750',
                 connection: { bus: 1, address: 35 },
-                zone_key: '',
+                zone_key: 'unassigned',  // Changed from '' to 'unassigned'
                 notes: ''
             };
             renderLightSensorsTable();
@@ -339,13 +539,39 @@
             }).catch(err => alert('Failed to save sensors: ' + err));
         }
 
+        function getLuxReading(readings, sensorId) {
+            if (!readings || !readings[sensorId]) return '—';
+            const reading = readings[sensorId];
+            
+            // Check for error first
+            if (reading.error) {
+                return '<span style="color: #f44336;">Error</span>';
+            }
+            
+            // New format: light_metrics.lux.value
+            const lightMode = (window.userSettings && window.userSettings.light_unit ? window.userSettings.light_unit : 'lux').toLowerCase();
+            if (lightMode === 'par' && reading.light_metrics && reading.light_metrics.PPFD && reading.light_metrics.PPFD.value != null) {
+                return Math.round(reading.light_metrics.PPFD.value) + ' µmol';
+            }
+            if (reading.light_metrics && reading.light_metrics.lux && reading.light_metrics.lux.value != null) {
+                return Math.round(reading.light_metrics.lux.value) + ' lux';
+            }
+            
+            // Old format: lux (fallback)
+            if (reading.lux != null) {
+                return Math.round(reading.lux) + ' lux';
+            }
+            
+            return '—';
+        }
+
         function getZoneOptions(selected) {
             const size = currentZones?.grid_size || { rows: 4, cols: 6 };
-            const options = [];
+            const options = ['<option value="unassigned" ' + (selected==='unassigned'?'selected':'') + '>Unassigned</option>'];
             for (let r = 0; r < size.rows; r++) {
                 for (let c = 0; c < size.cols; c++) {
                     const key = `${r}-${c}`;
-                    const zoneName = currentZones?.zones?.[key]?.crop || `Cell ${key}`;
+                    const zoneName = currentZones?.zones?.[key]?.crop_type || `Cell ${r+1},${c+1}`;
                     options.push(`<option value="${key}" ${selected===key?'selected':''}>${zoneName} (${key})</option>`);
                 }
             }

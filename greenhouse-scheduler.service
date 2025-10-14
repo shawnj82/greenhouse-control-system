@@ -1,0 +1,39 @@
+[Unit]
+Description=Greenhouse Sensor Scheduler Service
+Documentation=https://github.com/shawnj82/greenhouse-control-system
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shawn
+Group=shawn
+WorkingDirectory=/home/shawn/greenhouse-control-system
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/shawn/greenhouse-control-system/greenhouse-env/bin
+Environment=PYTHONPATH=/home/shawn/greenhouse-control-system
+ExecStart=/home/shawn/greenhouse-control-system/greenhouse-env/bin/python /home/shawn/greenhouse-control-system/sensor_scheduler_service.py
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/shawn/greenhouse-control-system/data
+ReadWritePaths=/home/shawn/greenhouse-control-system
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=256M
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=greenhouse-scheduler
+
+[Install]
+WantedBy=multi-user.target

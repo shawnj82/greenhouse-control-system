@@ -25,6 +25,11 @@ class TSL2591:
         self.bus = bus
         self.addr = addr
         self.sensor = None
+        # Adaptive settings
+        self._gains = [adafruit_tsl2591.GAIN_LOW, adafruit_tsl2591.GAIN_MED, adafruit_tsl2591.GAIN_HIGH, adafruit_tsl2591.GAIN_MAX]
+        self._integration_times = [adafruit_tsl2591.INTEGRATIONTIME_100MS, adafruit_tsl2591.INTEGRATIONTIME_200MS, adafruit_tsl2591.INTEGRATIONTIME_300MS, adafruit_tsl2591.INTEGRATIONTIME_400MS, adafruit_tsl2591.INTEGRATIONTIME_500MS, adafruit_tsl2591.INTEGRATIONTIME_600MS]
+        self._last_gain_idx = 0  # Start with lowest gain
+        self._last_integration_idx = 0  # Start with shortest integration
         self._initialize()
 
     def _initialize(self):
@@ -39,14 +44,73 @@ class TSL2591:
             self.sensor = None
 
     def read_lux(self):
-        """Read basic lux value for compatibility."""
+        """Read lux with adaptive gain/integration (stepwise)."""
         if not self.sensor:
-            # Mock value for development; replace with real sensor reading
             return 1234.0
-        
         try:
-            return float(self.sensor.lux) if self.sensor.lux is not None else None
-        except Exception:
+            # Aim to keep measurement under ~80% of a conservative full-scale estimate
+            max_lux = 88000  # Approximate upper bound for the device
+            target_ratio = 0.80
+            high_trigger = max_lux * 0.82  # step-down trigger
+            min_lux = 1
+
+            gain_idx = self._last_gain_idx
+            int_idx = self._last_integration_idx
+
+            # Apply current settings for this measurement
+            self.sensor.gain = self._gains[gain_idx]
+            self.sensor.integration_time = self._integration_times[int_idx]
+            time.sleep(0.12)
+            lux = float(self.sensor.lux) if self.sensor.lux is not None else None
+
+            # Decide adjustments for NEXT read
+            adjusted = False
+            new_gain_idx = gain_idx
+            new_int_idx = int_idx
+            if lux is not None:
+                if lux >= high_trigger:
+                    # Too high, reduce gain first then integration
+                    changed = False
+                    if new_gain_idx > 0:
+                        new_gain_idx -= 1
+                        changed = True
+                        print(f"[TSL2591] High signal ({lux:.1f} >= {high_trigger:.1f}): scheduling decrease gain to idx {new_gain_idx}")
+                    elif new_int_idx > 0:
+                        new_int_idx -= 1
+                        changed = True
+                        print(f"[TSL2591] High signal: scheduling decrease integration_time to idx {new_int_idx}")
+                    else:
+                        print("[TSL2591] High signal but already at minimum gain/time; holding settings")
+                    adjusted = changed
+                elif lux < min_lux:
+                    # Too low, increase integration time first then gain
+                    changed = False
+                    if new_int_idx < len(self._integration_times) - 1:
+                        new_int_idx += 1
+                        changed = True
+                        print(f"[TSL2591] Low signal ({lux:.1f} < {min_lux}): scheduling increase integration_time to idx {new_int_idx}")
+                    elif new_gain_idx < len(self._gains) - 1:
+                        new_gain_idx += 1
+                        changed = True
+                        print(f"[TSL2591] Low signal: scheduling increase gain to idx {new_gain_idx}")
+                    else:
+                        print("[TSL2591] Low signal but already at maximum gain/time; holding settings")
+                    adjusted = changed
+
+            # Apply scheduled changes after completing this read
+            if adjusted:
+                self._last_gain_idx = new_gain_idx
+                self._last_integration_idx = new_int_idx
+                self.sensor.gain = self._gains[new_gain_idx]
+                self.sensor.integration_time = self._integration_times[new_int_idx]
+                print(f"[TSL2591] Adjustment scheduled for next read: gain idx={new_gain_idx}, integration idx={new_int_idx}")
+            else:
+                self._last_gain_idx = gain_idx
+                self._last_integration_idx = int_idx
+
+            return lux
+        except Exception as e:
+            print(f"Error reading TSL2591: {e}")
             return None
 
     def read_full_spectrum(self):

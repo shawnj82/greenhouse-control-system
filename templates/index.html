@@ -12,12 +12,19 @@
         <nav>
             <a href="/" class="nav-link active">Dashboard</a>
             <a href="/zones" class="nav-link">Zones</a>
+            <a href="/settings" class="nav-link">Settings</a>
             <a href="/lights" class="nav-link">Lights</a>
             <a href="/calibration" class="nav-link">Calibration</a>
+            <a href="/settings" class="nav-link">Settings</a>
         </nav>
     </header>
 
     <main>
+
+    <script>
+        window.userSettings = {{ user_settings | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
         <!-- Status Overview -->
         <section class="status-overview">
             <h2>Current Status</h2>
@@ -102,6 +109,7 @@
                     <span class="checkmark"></span>
                     Show Light Amount
                 </label>
+                <!-- PPFD/Lux toggle moved to global Settings page -->
                 <label class="layer-toggle">
                     <input type="checkbox" id="showSensorMarkers" checked>
                     <span class="checkmark"></span>
@@ -112,6 +120,52 @@
                     <span class="checkmark"></span>
                     Show Zones (always on)
                 </label>
+                
+                <!-- Estimation tuning controls -->
+                <div id="estimation-controls" class="estimation-controls" title="Configure how sensor-based estimation is calculated">
+                    <label class="inline">
+                        <input type="checkbox" id="enableEstimation" checked>
+                        <span class="checkmark"></span>
+                        Estimate for non-sensor zones
+                    </label>
+                    <div class="estimation-inputs">
+                        <label>
+                            Power
+                            <input type="number" id="estPower" min="1" max="6" step="0.5" value="2">
+                        </label>
+                        <label>
+                            Max sensors
+                            <input type="number" id="estMaxSensors" min="1" max="12" step="1" value="4">
+                        </label>
+                        <label>
+                            Max distance (cells)
+                            <input type="number" id="estMaxDistance" min="1" max="100" step="1" value="100">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Lux scaling (log) controls -->
+                <div id="lux-controls" class="lux-controls" title="Tune how lux maps to brightness using a log scale">
+                    <div class="lux-inputs">
+                        <label>
+                            Max lux
+                            <input type="number" id="luxMaxLux" min="1000" max="200000" step="1000" value="100000">
+                        </label>
+                        <label>
+                            Soft floor (L0)
+                            <input type="number" id="luxSoftFloor" min="1" max="1000" step="1" value="50">
+                        </label>
+                        <label>
+                            Gamma
+                            <input type="number" id="luxGamma" min="0.5" max="4" step="0.1" value="2.0">
+                        </label>
+                        <label>
+                            Blending (alpha)
+                            <input type="range" id="luxAlpha" min="0" max="1" step="0.01" value="1" style="width:100px;">
+                            <span id="luxAlphaValue">1.00</span>
+                        </label>
+                    </div>
+                </div>
             </div>
             
             <div id="greenhouse-grid" class="grid-container">
@@ -157,7 +211,19 @@
         // Initialize the grid on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadGreenhouseGrid();
-            setInterval(updateStatus, 10000); // Update every 10 seconds
+            
+            // Get dynamic update interval from server
+            fetch('/api/frontend-config')
+                .then(response => response.json())
+                .then(config => {
+                    const interval = config.update_interval_ms;
+                    console.log(`Setting status update interval to ${interval}ms`);
+                    setInterval(updateStatus, interval);
+                })
+                .catch(error => {
+                    console.error('Error getting frontend config, using default 10s:', error);
+                    setInterval(updateStatus, 10000); // Fallback to 10 seconds
+                });
         });
     </script>
 </body>

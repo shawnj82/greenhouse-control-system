@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Configuration - Greenhouse Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .config-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .config-group {
+            margin-bottom: 20px;
+        }
+        .config-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .config-group input {
+            width: 100px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .config-description {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        .config-actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .btn-save {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .btn-reset {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-save:hover {
+            background: #45a049;
+        }
+        .btn-reset:hover {
+            background: #da190b;
+        }
+        .current-values {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .notification {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        .notification.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .notification.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navigation">
+            <div class="nav-brand">🌱 Greenhouse Control</div>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/zones">Zones</a>
+                <a href="/lights">Lights</a>
+                <a href="/calibration">Calibration</a>
+                <a href="/intelligent-control">Intelligent Control</a>
+                <a href="/configuration" class="active">Configuration</a>
+                <a href="/settings">Settings</a>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <div class="page-header">
+                <h1>⚙️ System Configuration</h1>
+                <p>Configure sensor update frequencies and system behavior</p>
+            </div>
+
+            <div id="notification" class="notification"></div>
+
+            <div class="config-section">
+                <h2>📊 Sensor Reading Configuration</h2>
+                
+                <div class="current-values">
+                    <h3>Current Settings</h3>
+                    <div>
+                        <strong>Backend Cache TTL:</strong> <span id="current-cache-ttl">{{ config.sensor_cache_ttl }}</span> seconds
+                    </div>
+                    <div>
+                        <strong>Frontend Update Interval:</strong> <span id="current-update-interval">{{ config.frontend_update_interval }}</span> seconds
+                    </div>
+                </div>
+
+                <form id="configForm">
+                    <div class="config-group">
+                        <label for="sensor_cache_ttl">Backend Sensor Cache TTL (seconds)</label>
+                        <input type="number" id="sensor_cache_ttl" name="sensor_cache_ttl" 
+                               value="{{ config.sensor_cache_ttl }}" min="1" max="60" step="1">
+                        <div class="config-description">
+                            How long sensor readings are cached on the server. Lower values = more frequent hardware reads, higher values = less sensor polling.
+                            <br><strong>Recommended:</strong> 5-10 seconds for responsive updates without overwhelming the sensor.
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="frontend_update_interval">Frontend Update Interval (seconds)</label>
+                        <input type="number" id="frontend_update_interval" name="frontend_update_interval" 
+                               value="{{ config.frontend_update_interval }}" min="1" max="300" step="1">
+                        <div class="config-description">
+                            How often the web interface automatically refreshes sensor data. Lower values = more responsive UI, higher values = less network traffic.
+                            <br><strong>Recommended:</strong> 10-30 seconds for greenhouse monitoring.
+                        </div>
+                    </div>
+
+                    <div class="config-actions">
+                        <button type="submit" class="btn-save">💾 Save Configuration</button>
+                        <button type="button" class="btn-reset" onclick="resetToDefaults()">🔄 Reset to Defaults</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="config-section">
+                <h2>📋 Configuration Guidelines</h2>
+                <div style="line-height: 1.6;">
+                    <h3>Backend Cache TTL:</h3>
+                    <ul>
+                        <li><strong>1-2 seconds:</strong> Real-time updates, high sensor load</li>
+                        <li><strong>5 seconds:</strong> Default, good balance of responsiveness and efficiency</li>
+                        <li><strong>10-15 seconds:</strong> Reduced sensor load, still responsive</li>
+                        <li><strong>30+ seconds:</strong> Minimal sensor load, slower updates</li>
+                    </ul>
+
+                    <h3>Frontend Update Interval:</h3>
+                    <ul>
+                        <li><strong>1-5 seconds:</strong> Real-time monitoring, high network usage</li>
+                        <li><strong>10 seconds:</strong> Default, responsive for active monitoring</li>
+                        <li><strong>30-60 seconds:</strong> Background monitoring, minimal network usage</li>
+                        <li><strong>120+ seconds:</strong> Periodic checks, very low network usage</li>
+                    </ul>
+
+                    <h3>Performance Considerations:</h3>
+                    <ul>
+                        <li>TCS34725 sensor readings take ~500ms due to 240ms integration time</li>
+                        <li>Light conditions in greenhouses change slowly (minutes, not seconds)</li>
+                        <li>More frequent updates = higher CPU/network usage</li>
+                        <li>Cache TTL should be ≤ Frontend Interval for best performance</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        let currentConfig = {{ config | tojson }};
+
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+
+        function resetToDefaults() {
+            document.getElementById('sensor_cache_ttl').value = 5;
+            document.getElementById('frontend_update_interval').value = 10;
+            showNotification('Form reset to default values. Click Save to apply.', 'success');
+        }
+
+        function updateCurrentValues() {
+            fetch('/api/configuration')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('current-cache-ttl').textContent = data.config.sensor_cache_ttl;
+                    document.getElementById('current-update-interval').textContent = data.config.frontend_update_interval;
+                    currentConfig = data.config;
+                })
+                .catch(error => {
+                    console.error('Error fetching current config:', error);
+                });
+        }
+
+        document.getElementById('configForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const config = Object.fromEntries(formData.entries());
+            
+            // Convert to integers
+            config.sensor_cache_ttl = parseInt(config.sensor_cache_ttl);
+            config.frontend_update_interval = parseInt(config.frontend_update_interval);
+            
+            fetch('/api/configuration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Configuration saved successfully!', 'success');
+                    updateCurrentValues();
+                    
+                    // Notify user if frontend interval changed
+                    if (config.frontend_update_interval !== currentConfig.frontend_update_interval) {
+                        setTimeout(() => {
+                            showNotification('Frontend update interval changed. Refresh the page to apply new timing.', 'success');
+                        }, 2000);
+                    }
+                } else {
+                    showNotification(`Error: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification(`Network error: ${error}`, 'error');
+                console.error('Error:', error);
+            });
+        });
+
+        // Update current values on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentValues();
+        });
+    </script>
+</body>
+</html>

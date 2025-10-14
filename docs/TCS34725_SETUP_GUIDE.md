@@ -33,6 +33,20 @@ SDA             → GPIO 2 (Pin 3) - I2C Data
 SCL             → GPIO 3 (Pin 5) - I2C Clock
 ```
 
+### **🚨 CRITICAL: LED Disable for Ambient Light**
+**For accurate ambient light readings, you MUST disable the onboard LED:**
+
+1. **Locate the LED pin** on your TCS34725 breakout board
+2. **Jumper LED pin to GND** using a short wire or solder bridge
+3. **Verify LED is OFF** - no white light should emit from the sensor
+
+```
+TCS34725 LED Disable:
+LED pin → GND (any ground pin on the breakout)
+```
+
+**Why this matters:** The onboard LED can add 1000+ lux to readings, completely masking actual ambient light conditions.
+
 ### **I2C Configuration**
 - **Default Address**: `0x29` (can't be changed)
 - **Bus Speed**: Standard 100kHz or Fast 400kHz
@@ -82,21 +96,15 @@ python test_tcs34725.py
 Once tested, the TCS34725 integrates with your intelligent light system:
 
 ### **Configuration**
-Add to your sensor configuration in `data/zones.json`:
+Add your sensor to `data/light_sensors.json`:
 ```json
 {
-  "zone_1": {
-    "sensors": {
-      "color_sensor": {
-        "type": "TCS34725",
-        "connection": {
-          "bus": 1,
-          "address": "0x29"
-        },
-        "location": {
-          "description": "Plant canopy level"
-        }
-      }
+  "sensors": {
+    "ls-tcs34725-1": {
+      "name": "TCS34725 Sensor",
+      "type": "TCS34725",
+      "connection": { "bus": 1, "address": 41 },
+      "zone_key": "A1"
     }
   }
 }

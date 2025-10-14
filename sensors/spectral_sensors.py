@@ -149,7 +149,85 @@ class AS7341Spectral:
 
 
 class TCS34725Color:
-    """TCS34725 RGB color sensor for basic color analysis."""
+    def approximate_ppfd(self, color_data: Dict[str, float]) -> float:
+        """Advanced PPFD approximation using RGB spectral analysis and lux.
+        
+        This method uses the RGB ratios to estimate spectral distribution and applies
+        photosynthetic action spectrum weighting for more accurate PAR estimation.
+        
+        Photosynthetic efficiency by wavelength region (relative):
+        - Blue (400-500nm): 0.85 efficiency (chlorophyll b absorption peak)
+        - Green (500-600nm): 0.70 efficiency (lower absorption, but still useful)
+        - Red (600-700nm): 1.00 efficiency (chlorophyll a absorption peak)
+        
+        The TCS34725 RGB channels roughly correspond to:
+        - Blue channel: ~465nm peak (includes violet-blue)
+        - Green channel: ~525nm peak 
+        - Red channel: ~615nm peak (includes red-orange)
+        """
+        lux = color_data.get('lux', 0)
+        if lux == 0:
+            return 0.0
+            
+        # Get raw RGB values
+        r_raw = color_data.get('red_raw', 0)
+        g_raw = color_data.get('green_raw', 0) 
+        b_raw = color_data.get('blue_raw', 0)
+        
+        # Calculate total and avoid division by zero
+        total_rgb = r_raw + g_raw + b_raw
+        if total_rgb == 0:
+            # Fallback to basic color temperature method
+            color_temp = color_data.get('color_temperature_k', 5000)
+            base_factor = 0.0185 if color_temp > 4000 else 0.0165
+            return lux * base_factor
+            
+        # Calculate RGB percentages
+        r_pct = r_raw / total_rgb
+        g_pct = g_raw / total_rgb
+        b_pct = b_raw / total_rgb
+        
+        # Photosynthetic efficiency weights for each color channel
+        # Based on photosynthetic action spectrum and typical LED spectral distributions
+        red_efficiency = 1.00    # Peak efficiency (660-680nm region)
+        green_efficiency = 0.70  # Lower but non-zero (green light penetrates deeper)
+        blue_efficiency = 0.85   # High efficiency (430-450nm chlorophyll peaks)
+        
+        # Calculate weighted photosynthetic efficiency
+        spectral_efficiency = (r_pct * red_efficiency + 
+                             g_pct * green_efficiency + 
+                             b_pct * blue_efficiency)
+        
+        # Base conversion factor (typical for white LEDs)
+        base_conversion = 0.0185
+        
+        # Adjust conversion factor based on spectral content
+        # More red/blue content = higher PPFD per lux
+        # More green content = lower PPFD per lux
+        efficiency_factor = spectral_efficiency / 0.85  # Normalize to typical white LED
+        
+        # Apply color temperature fine-tuning
+        color_temp = color_data.get('color_temperature_k', 5000)
+        if color_temp < 3000:
+            # Very warm - boost red efficiency slightly
+            temp_adjustment = 1.02
+        elif color_temp > 6000:
+            # Very cool - blue content may be excessive
+            temp_adjustment = 0.98
+        else:
+            temp_adjustment = 1.0
+            
+        final_conversion = base_conversion * efficiency_factor * temp_adjustment
+        
+        # Clamp to reasonable bounds (0.010 to 0.025 μmol/m²/s per lux)
+        final_conversion = max(0.010, min(0.025, final_conversion))
+        
+        return lux * final_conversion
+    """TCS34725 RGB color sensor for ambient light analysis.
+    
+    IMPORTANT: For accurate ambient light readings, ensure the onboard LED
+    is disabled by jumpering the LED pin to GND on the breakout board.
+    """
     
     DEFAULT_ADDR = 0x29
     
@@ -157,41 +235,131 @@ class TCS34725Color:
         self.bus_num = bus
         self.addr = addr
         self.sensor = None
+        # Track last used settings for adaptive adjustment
+        self._last_integration_idx = 5  # default to 240ms (index 5)
+        self._last_gain_idx = 2         # default to 16x (index 2)
+        self._integration_times = [2.4, 24, 50, 101, 154, 240]  # ms
+        self._gains = [1, 4, 16, 60]
         self._initialize()
     
     def _initialize(self):
-        """Initialize the TCS34725 sensor."""
+        """Initialize the TCS34725 sensor with optimal ambient light settings."""
         if not _HAS_SPECTRAL:
             return
         try:
             i2c = busio.I2C(board.SCL, board.SDA)
             self.sensor = adafruit_tcs34725.TCS34725(i2c, address=self.addr)
+            
+            # Configure for optimal ambient light measurement
+            self.sensor.integration_time = 240  # 240ms for better accuracy
+            self.sensor.gain = 16              # Higher gain for low light sensitivity
+            self.sensor.interrupt = False      # Clear any interrupt flags
+            
+            print(f"TCS34725 initialized for ambient light: integration_time={self.sensor.integration_time}ms, gain={self.sensor.gain}x")
+            
         except Exception as e:
             print(f"Failed to initialize TCS34725: {e}")
             self.sensor = None
     
     def read_color(self) -> Optional[Dict[str, float]]:
-        """Read RGB color data."""
+        """Read RGB color data with adaptive gain/integration: only step up/down if needed."""
         if not self.sensor:
             return None
-        
         try:
-            # Read RGBC values
+            import time
+            max_clear = 65535
+            # Target to keep under ~80% of full scale to avoid clipping and allow headroom
+            target_ratio = 0.80
+            high_trigger = int(max_clear * 0.82)  # step-down trigger (hysteresis above target)
+            high_release = int(max_clear * 0.78)  # release threshold to avoid chattering
+            # Low end thresholds (keep existing conservative low signal floor)
+            min_clear = 5000
+            min_clear_up = 6000    # step-up trigger with small hysteresis
+            # Use last settings
+            it_idx = self._last_integration_idx
+            gain_idx = self._last_gain_idx
+            integration_times = self._integration_times
+            gains = self._gains
+            # Apply current (last used) settings for this measurement
+            self.sensor.integration_time = integration_times[it_idx]
+            self.sensor.gain = gains[gain_idx]
+            time.sleep(0.15)
+
+            # Read values under current settings BEFORE making any adjustments
             r, g, b, c = self.sensor.color_raw
-            
-            # Calculate color temperature and lux
+            # Also compute lux and color temperature using current settings
             color_temp = self.sensor.color_temperature
             lux = self.sensor.lux
-            
-            return {
+            # Guard against negative lux from DN40 calc under certain spectra
+            if lux is not None and lux < 0:
+                print(f"[TCS34725][WARN] Negative lux computed ({lux}); clamping to 0.0")
+                lux = 0.0
+            print(f"[TCS34725] RAW: r={r}, g={g}, b={b}, c={c}, lux={lux}, color_temp={color_temp}")
+
+            # Decide adjustments for NEXT measurement
+            adjusted = False
+            new_it_idx = it_idx
+            new_gain_idx = gain_idx
+            # Step logic with hysteresis: if near clip, reduce; if too low, increase
+            if c >= high_trigger:
+                # Too high, step down gain first, then integration
+                changed = False
+                if new_gain_idx > 0:
+                    new_gain_idx -= 1
+                    changed = True
+                    print(f"[TCS34725] High signal ({c} >= {high_trigger}): scheduling decrease gain to {gains[new_gain_idx]}x")
+                elif new_it_idx > 0:
+                    new_it_idx -= 1
+                    changed = True
+                    print(f"[TCS34725] High signal: scheduling decrease integration_time to {integration_times[new_it_idx]}ms")
+                else:
+                    # Already at minimum settings, cannot adjust further
+                    print("[TCS34725] High signal but already at minimum gain/time; holding settings")
+                adjusted = changed
+            elif c < min_clear_up:
+                # Too low, step up integration time first, then gain
+                changed = False
+                if new_it_idx < len(integration_times) - 1:
+                    new_it_idx += 1
+                    changed = True
+                    print(f"[TCS34725] Low signal ({c} < {min_clear_up}): scheduling increase integration_time to {integration_times[new_it_idx]}ms")
+                elif new_gain_idx < len(gains) - 1:
+                    new_gain_idx += 1
+                    changed = True
+                    print(f"[TCS34725] Low signal: scheduling increase gain to {gains[new_gain_idx]}x")
+                else:
+                    # Already at maximum settings, cannot adjust further
+                    print("[TCS34725] Low signal but already at maximum gain/time; holding settings")
+                adjusted = changed
+
+            # Apply any scheduled changes AFTER completing the current read,
+            # so that returned values reflect the original settings.
+            if adjusted:
+                self._last_integration_idx = new_it_idx
+                self._last_gain_idx = new_gain_idx
+                # Reinitialize sensor to force new settings to take effect immediately
+                print(f"[TCS34725] Adjustment scheduled for next read: integration_time={integration_times[new_it_idx]}ms, gain={gains[new_gain_idx]}x. Reinitializing sensor for fast stabilization.")
+                self._initialize()
+                # After reinitialization, settings are already applied in _initialize()
+            else:
+                # Keep last indices unchanged
+                self._last_integration_idx = it_idx
+                self._last_gain_idx = gain_idx
+
+            color_data = {
                 'red_raw': r,
-                'green_raw': g, 
+                'green_raw': g,
                 'blue_raw': b,
                 'clear_raw': c,
                 'color_temperature_k': color_temp,
-                'lux': lux
+                'lux': lux,
+                # Report the settings used for this reading (pre-adjustment)
+                'integration_time_ms': integration_times[it_idx],
+                'gain': gains[gain_idx]
             }
-            
+            # Add PPFD approximation
+            color_data['ppfd_approx'] = self.approximate_ppfd(color_data)
+            return color_data
         except Exception as e:
             print(f"Error reading TCS34725: {e}")
             return None
@@ -288,13 +456,13 @@ class SpectralSensorReader:
                     color_data = sensor.read_color()
                     if color_data:
                         rgb_ratios = sensor.calculate_rgb_ratios(color_data)
-                        
                         results[sensor_id] = {
                             'type': 'color',
                             'color_data': color_data,
                             'rgb_ratios': rgb_ratios,
                             'lux': color_data.get('lux', 0),
-                            'color_temperature': color_data.get('color_temperature_k', 0)
+                            'color_temperature': color_data.get('color_temperature_k', 0),
+                            'ppfd_approx': color_data.get('ppfd_approx', 0)
                         }
                         
             except Exception as e:
@@ -336,6 +504,8 @@ class SpectralSensorReader:
                 sensor_analysis = {
                     'sensor_id': sensor_id,
                     'intensity_change': 0,
+                    'lux_change': 0,
+                    'ppfd_change': 0,
                     'spectral_change': None,
                     'color_shift': None
                 }
@@ -390,15 +560,24 @@ class SpectralSensorReader:
                     sensor_analysis['color_temp_change'] = light_temp - baseline_temp
                 
                 # Basic intensity change for all sensor types
-                baseline_intensity = (baseline.get('lux', 0) or 
-                                    baseline.get('total_intensity', 0) or 
-                                    baseline.get('par_weighted_intensity', 0))
-                light_intensity = (light_on.get('lux', 0) or 
-                                 light_on.get('total_intensity', 0) or 
-                                 light_on.get('par_weighted_intensity', 0))
-                
+                baseline_lux = baseline.get('lux', 0)
+                light_lux = light_on.get('lux', 0)
+                sensor_analysis['lux_change'] = light_lux - baseline_lux
+
+                # For TCS34725, use ppfd_approx if available
+                if 'ppfd_approx' in baseline and 'ppfd_approx' in light_on:
+                    baseline_ppfd = baseline.get('ppfd_approx', 0)
+                    light_ppfd = light_on.get('ppfd_approx', 0)
+                    sensor_analysis['ppfd_change'] = light_ppfd - baseline_ppfd
+                else:
+                    baseline_par = baseline.get('par_weighted_intensity', 0)
+                    light_par = light_on.get('par_weighted_intensity', 0)
+                    sensor_analysis['ppfd_change'] = light_par - baseline_par
+
+                baseline_intensity = (baseline_lux or baseline.get('total_intensity', 0) or baseline_par)
+                light_intensity = (light_lux or light_on.get('total_intensity', 0) or light_par)
                 sensor_analysis['intensity_change'] = light_intensity - baseline_intensity
-                
+
                 analysis['spectral_signature'][sensor_id] = sensor_analysis
         
         return analysis

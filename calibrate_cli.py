@@ -27,6 +27,7 @@ def main():
     calibrate_parser = subparsers.add_parser('calibrate', help='Calibrate specific light')
     calibrate_parser.add_argument('light_id', help='Light ID to calibrate')
     calibrate_parser.add_argument('--readings', type=int, default=5, help='Number of readings to average')
+    calibrate_parser.add_argument('--comprehensive', action='store_true', help='Use spectral (TCS34725/AS7341) comprehensive calibration')
     
     # Full calibration
     full_parser = subparsers.add_parser('full', help='Run full calibration of all lights')
@@ -55,6 +56,13 @@ def main():
     
     # Status
     status_parser = subparsers.add_parser('status', help='Show system status')
+
+    # Manual single-light calibration (prompts user to toggle light)
+    manual_parser = subparsers.add_parser('manual', help='Manual single-light calibration with prompts')
+    manual_parser.add_argument('light_id', help='Light ID to calibrate')
+    manual_parser.add_argument('--readings', type=int, default=5, help='Number of readings to average')
+    manual_parser.add_argument('--delay', type=float, default=2.0, help='Delay between readings (seconds)')
+    manual_parser.add_argument('--no-relay', action='store_true', help='Do not attempt to toggle relay (use when running off-Pi)')
     
     args = parser.parse_args()
     
@@ -71,10 +79,46 @@ def main():
             print(f"Baseline measurements: {json.dumps(baseline, indent=2)}")
             
         elif args.command == 'calibrate':
-            print(f"Calibrating light: {args.light_id}")
-            baseline = calibrator.measure_baseline()
-            effect = calibrator.calibrate_light(args.light_id, baseline, num_readings=args.readings)
-            print(f"Light effect: {json.dumps(effect, indent=2)}")
+            if args.comprehensive:
+                print(f"Comprehensive calibration for light: {args.light_id}")
+                baseline = calibrator.measure_baseline_comprehensive(num_readings=args.readings)
+                result = calibrator.calibrate_light_comprehensive(args.light_id, baseline, num_readings=args.readings)
+                
+                # Save single-light comprehensive results to calibration data
+                calibrator.calibration_data = {
+                    'timestamp': result.get('timestamp', __import__('datetime').datetime.now().isoformat()),
+                    'calibration_type': 'comprehensive_single_light',
+                    'baseline': baseline.get('basic_sensors', {}),
+                    'comprehensive_baseline': baseline,
+                    'light_effects': {args.light_id: result.get('basic_effect', {})},
+                    'spectrum_profiles': {args.light_id: {
+                        'spectrum_analysis': result.get('spectrum_analysis', {}),
+                        'light_data': result.get('light_data', {})
+                    }},
+                    'sensor_zones': calibrator.sensor_reader.get_sensor_zones()
+                }
+                calibrator._save_calibration_data()
+                print(f"Comprehensive calibration data saved to {calibrator.data_dir / 'light_calibration.json'}")
+                
+                # Pretty print key parts
+                basic_effect = result.get('basic_effect', {})
+                print("Basic effect (if any):")
+                print(json.dumps(basic_effect, indent=2))
+                spectrum = result.get('spectrum_analysis', {})
+                print("Spectrum analysis summary:")
+                sig = spectrum.get('spectral_signature', {})
+                brief = {
+                    sid: {
+                        'intensity_change': round(v.get('intensity_change', 0), 3),
+                        'color_shift': v.get('color_shift')
+                    } for sid, v in sig.items()
+                }
+                print(json.dumps(brief, indent=2))
+            else:
+                print(f"Calibrating light: {args.light_id}")
+                baseline = calibrator.measure_baseline()
+                effect = calibrator.calibrate_light(args.light_id, baseline, num_readings=args.readings)
+                print(f"Light effect: {json.dumps(effect, indent=2)}")
             
         elif args.command == 'full':
             if args.comprehensive:
@@ -224,6 +268,70 @@ def main():
                 print(f"  Last calibration: {timestamp}")
             else:
                 print("  Last calibration: Never")
+        
+        elif args.command == 'manual':
+            print("Manual single-light calibration (comprehensive)")
+            print("This will: 1) read baseline with light OFF, 2) read with light ON, 3) compute deltas.")
+            input("Ensure the light is OFF, then press Enter to start baseline...")
+
+            baseline = calibrator.measure_baseline_comprehensive(num_readings=args.readings, delay=args.delay)
+
+            if not args.no_relay:
+                print(f"Attempting to turn ON light via relay: {args.light_id}")
+                calibrator.light_controller.turn_on_light(args.light_id)
+            else:
+                input("Now turn ON the light manually, then press Enter to continue...")
+
+            import time as _t
+            _t.sleep(3)
+
+            # Collect comprehensive ON readings
+            on_readings = []
+            for i in range(args.readings):
+                basic = calibrator.sensor_reader.read_all_sensors()
+                spectral = calibrator.spectral_reader.read_comprehensive_data()
+                on_readings.append({'basic': basic, 'spectral': spectral, 'timestamp': _t.time()})
+                if i < args.readings - 1:
+                    _t.sleep(args.delay)
+
+            # Process
+            light_on_data = calibrator._process_comprehensive_readings(on_readings)
+
+            # Analyze spectrum
+            spectrum_analysis = calibrator.spectral_reader.analyze_light_spectrum(
+                args.light_id,
+                baseline.get('spectral_sensors', {}),
+                light_on_data.get('spectral_sensors', {})
+            )
+
+            # Compute basic effect (if any basic sensors present)
+            basic_effect = {}
+            base_basic = baseline.get('basic_sensors', {})
+            on_basic = light_on_data.get('basic_sensors', {})
+            for sid in base_basic.keys():
+                if sid in on_basic:
+                    basic_effect[sid] = on_basic[sid] - base_basic.get(sid, 0)
+
+            # Build result and write a small file
+            result = {
+                'timestamp': __import__('datetime').datetime.now().isoformat(),
+                'mode': 'manual_comprehensive_single',
+                'light_id': args.light_id,
+                'baseline': baseline,
+                'light_on': light_on_data,
+                'basic_effect': basic_effect,
+                'spectrum_analysis': spectrum_analysis
+            }
+
+            out_path = Path(args.data_dir) / 'single_manual_calibration.json'
+            with open(out_path, 'w') as f:
+                json.dump(result, f, indent=2)
+
+            print(f"Manual calibration written to: {out_path}")
+            # Brief summary
+            sig = spectrum_analysis.get('spectral_signature', {})
+            for sid, v in sig.items():
+                print(f"  Sensor {sid}: Δlux≈{v.get('intensity_change'):.3f}, ΔRGB%={v.get('color_shift')}")
                 
         return 0
         

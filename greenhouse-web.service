@@ -1,0 +1,21 @@
+[Unit]
+Description=Greenhouse Control Web Server
+After=network.target
+Wants=greenhouse-scheduler.service
+
+[Service]
+Type=simple
+User=shawn
+Group=shawn
+WorkingDirectory=/home/shawn/greenhouse-control-system
+ExecStart=/home/shawn/greenhouse-control-system/start-web-server.sh
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=greenhouse-web
+
+[Install]
+WantedBy=multi-user.target

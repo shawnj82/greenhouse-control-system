@@ -25,45 +25,7 @@ from sensors.veml7700 import VEML7700
 from sensors.spectral_sensors import SpectralSensorReader
 
 
-class LightController:
-    """Controls individual lights via relays."""
-    
-    def __init__(self, lights_config: Dict):
-        self.lights = {}
-        self.relays = {}
-        
-        # Initialize relays for each light
-        for light_id, config in lights_config.items():
-            # Assuming each light has a relay_pin in its config
-            # You'll need to add this to your lights.json
-            relay_pin = config.get('relay_pin')
-            if relay_pin:
-                self.relays[light_id] = Relay(pin=relay_pin, active_high=True)
-                self.lights[light_id] = config
-    
-    def turn_on_light(self, light_id: str) -> bool:
-        """Turn on a specific light."""
-        if light_id in self.relays:
-            self.relays[light_id].on()
-            return True
-        return False
-    
-    def turn_off_light(self, light_id: str) -> bool:
-        """Turn off a specific light."""
-        if light_id in self.relays:
-            self.relays[light_id].off()
-            return True
-        return False
-    
-    def turn_off_all_lights(self):
-        """Turn off all lights."""
-        for relay in self.relays.values():
-            relay.off()
-    
-    def cleanup(self):
-        """Clean up GPIO resources."""
-        for relay in self.relays.values():
-            relay.cleanup()
+# Legacy LightController removed (replaced by EnhancedLightController)
 
 
 class SensorReader:
@@ -104,6 +66,23 @@ class SensorReader:
                     addr = connection.get('address', VEML7700.DEFAULT_ADDR)
                     self.sensors[sensor_id] = {
                         'instance': VEML7700(bus=bus, addr=addr),
+                        'config': config
+                    }
+                elif sensor_type == 'TCS34725':
+                    # Add TCS34725 as a basic sensor for lux reading
+                    from sensors.spectral_sensors import TCS34725Color
+                    bus = connection.get('bus', 1)
+                    addr = connection.get('address', 0x29)
+                    class TCS34725LuxWrapper:
+                        def __init__(self, bus, addr):
+                            self._sensor = TCS34725Color(bus=bus, addr=addr)
+                        def read_lux(self):
+                            color = self._sensor.read_color()
+                            if color and 'lux' in color:
+                                return color['lux']
+                            return None
+                    self.sensors[sensor_id] = {
+                        'instance': TCS34725LuxWrapper(bus=bus, addr=addr),
                         'config': config
                     }
             except Exception as e:
@@ -182,37 +161,70 @@ class LightCalibrator:
         """Save calibration data to file."""
         self._save_json(self.calibration_data, 'light_calibration.json')
     
-    def measure_baseline_comprehensive(self, num_readings: int = 5, delay: float = 2.0) -> Dict:
-        """Measure comprehensive baseline including spectrum data."""
+    def measure_baseline_comprehensive(self, num_readings: int = 5, delay: float = 2.0, lux_stddev_percent: float = 5.0) -> Dict:
+        """
+        Measure comprehensive baseline including spectrum data.
+        Uses a stability check on lux readings: if the standard deviation exceeds lux_stddev_percent of the mean,
+        up to 3 rounds of readings are taken. If still unstable, raises an error.
+        Tuning parameter: lux_stddev_percent (default 5.0). Adjust as needed for your environment.
+        Only the lux readings are used for steadiness check. See documentation for tuning guidance.
+        """
+        import statistics
         print("Measuring comprehensive baseline with all lights off...")
-        
-        # Turn off all lights
         self.light_controller.turn_off_all_lights()
         time.sleep(5)  # Wait for stabilization
-        
-        # Take multiple readings and average
-        baseline_readings = []
-        for i in range(num_readings):
-            # Get both basic and spectral readings
-            basic_readings = self.sensor_reader.read_all_sensors()
-            spectral_readings = self.spectral_reader.read_comprehensive_data()
-            
-            # Combine readings
-            combined_reading = {
-                'basic': basic_readings,
-                'spectral': spectral_readings,
-                'timestamp': time.time()
-            }
-            baseline_readings.append(combined_reading)
-            
-            if i < num_readings - 1:
-                time.sleep(delay)
-        
-        # Process and average the readings
-        baseline = self._process_comprehensive_readings(baseline_readings)
-        
-        print(f"Comprehensive baseline measured")
-        return baseline
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            baseline_readings = []
+            for i in range(num_readings):
+                basic_readings = self.sensor_reader.read_all_sensors()
+                spectral_readings = self.spectral_reader.read_comprehensive_data()
+                combined_reading = {
+                    'basic': basic_readings,
+                    'spectral': spectral_readings,
+                    'timestamp': time.time()
+                }
+                baseline_readings.append(combined_reading)
+                if i < num_readings - 1:
+                    time.sleep(delay)
+            # Check lux stability
+            lux_values = []
+            for reading in baseline_readings:
+                for v in reading['basic'].values():
+                    if v is not None:
+                        lux_values.append(v)
+            print(f"[DEBUG] Lux values for stability check: {lux_values}")
+            stdev_percent = None
+            if len(lux_values) == 0:
+                print("No valid lux readings collected. Retrying...")
+            elif len(lux_values) == 1:
+                # Only one value, treat as perfectly stable
+                mean_lux = lux_values[0]
+                stddev_lux = 0.0
+                percent = 0.0
+                stdev_percent = percent
+                print(f"Lux stability check: mean={mean_lux:.2f}, stddev={stddev_lux:.2f}, percent={percent:.2f}% (threshold {lux_stddev_percent}%) [single value, treated as stable]")
+                baseline = self._process_comprehensive_readings(baseline_readings)
+                baseline['lux_stdev_percent'] = stdev_percent
+                print(f"Comprehensive baseline measured (stable), stdev_percent={stdev_percent:.2f}%")
+                return baseline
+            else:
+                mean_lux = sum(lux_values) / len(lux_values)
+                stddev_lux = statistics.stdev(lux_values)
+                if mean_lux > 0:
+                    percent = 100.0 * stddev_lux / mean_lux
+                    stdev_percent = percent
+                    print(f"Lux stability check: mean={mean_lux:.2f}, stddev={stddev_lux:.2f}, percent={percent:.2f}% (threshold {lux_stddev_percent}%)")
+                    if percent <= lux_stddev_percent:
+                        baseline = self._process_comprehensive_readings(baseline_readings)
+                        baseline['lux_stdev_percent'] = stdev_percent
+                        print(f"Comprehensive baseline measured (stable), stdev_percent={stdev_percent:.2f}%")
+                        return baseline
+                    else:
+                        print(f"Lux readings not steady (attempt {attempt+1}/{max_attempts}), retrying...")
+                else:
+                    print("Mean lux is zero, cannot check stability. Retrying...")
+        raise RuntimeError(f"Lux readings did not stabilize after {max_attempts} attempts. Calibration failed.")
     
     def _process_comprehensive_readings(self, readings_list: List[Dict]) -> Dict:
         """Process and average comprehensive sensor readings."""
@@ -301,65 +313,116 @@ class LightCalibrator:
         return baseline
     
     def calibrate_light_comprehensive(self, light_id: str, baseline: Dict, 
-                                     num_readings: int = 5, delay: float = 2.0) -> Dict:
-        """Comprehensive calibration including spectrum analysis for a single light."""
+                                     num_readings: int = 5, delay: float = 2.0, lux_stddev_percent: float = 5.0) -> Dict:
+        """
+        Comprehensive calibration including spectrum analysis for a single light.
+        Uses a stability check on lux readings: if the standard deviation exceeds lux_stddev_percent of the mean,
+        up to 3 rounds of readings are taken. If still unstable, raises an error.
+        Tuning parameter: lux_stddev_percent (default 5.0). Adjust as needed for your environment.
+        Only the lux readings are used for steadiness check. See documentation for tuning guidance.
+        """
+        import statistics
         print(f"Comprehensive calibration of light: {light_id}")
-        
-        # Turn on only this light
         self.light_controller.turn_off_all_lights()
         time.sleep(2)
         self.light_controller.turn_on_light(light_id)
         time.sleep(5)  # Wait for stabilization
-        
-        # Take multiple readings
-        light_readings = []
-        for i in range(num_readings):
-            # Get both basic and spectral readings
-            basic_readings = self.sensor_reader.read_all_sensors()
-            spectral_readings = self.spectral_reader.read_comprehensive_data()
-            
-            combined_reading = {
-                'basic': basic_readings,
-                'spectral': spectral_readings,
-                'timestamp': time.time()
-            }
-            light_readings.append(combined_reading)
-            
-            if i < num_readings - 1:
-                time.sleep(delay)
-        
-        # Process readings
-        light_data = self._process_comprehensive_readings(light_readings)
-        
-        # Analyze spectrum characteristics
-        spectrum_analysis = self.spectral_reader.analyze_light_spectrum(
-            light_id, 
-            baseline.get('spectral_sensors', {}),
-            light_data.get('spectral_sensors', {})
-        )
-        
-        # Calculate basic effects (for backward compatibility)
-        basic_effect = {}
-        baseline_basic = baseline.get('basic_sensors', {})
-        light_basic = light_data.get('basic_sensors', {})
-        
-        for sensor_id in baseline_basic.keys():
-            if sensor_id in light_basic:
-                basic_effect[sensor_id] = light_basic[sensor_id] - baseline_basic.get(sensor_id, 0)
-        
-        # Turn off the light
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            light_readings = []
+            for i in range(num_readings):
+                basic_readings = self.sensor_reader.read_all_sensors()
+                spectral_readings = self.spectral_reader.read_comprehensive_data()
+                combined_reading = {
+                    'basic': basic_readings,
+                    'spectral': spectral_readings,
+                    'timestamp': time.time()
+                }
+                light_readings.append(combined_reading)
+                if i < num_readings - 1:
+                    time.sleep(delay)
+            # Check lux stability
+            lux_values = []
+            for reading in light_readings:
+                for v in reading['basic'].values():
+                    if v is not None:
+                        lux_values.append(v)
+            print(f"[DEBUG] Lux values for stability check: {lux_values}")
+            stdev_percent = None
+            if len(lux_values) == 0:
+                print("No valid lux readings collected. Retrying...")
+            elif len(lux_values) == 1:
+                mean_lux = lux_values[0]
+                stddev_lux = 0.0
+                percent = 0.0
+                stdev_percent = percent
+                print(f"Lux stability check: mean={mean_lux:.2f}, stddev={stddev_lux:.2f}, percent={percent:.2f}% (threshold {lux_stddev_percent}%) [single value, treated as stable]")
+                light_data = self._process_comprehensive_readings(light_readings)
+                light_data['lux_stdev_percent'] = stdev_percent
+                # Analyze spectrum characteristics
+                spectrum_analysis = self.spectral_reader.analyze_light_spectrum(
+                    light_id, 
+                    baseline.get('spectral_sensors', {}),
+                    light_data.get('spectral_sensors', {})
+                )
+                # Calculate basic effects (for backward compatibility)
+                basic_effect = {}
+                baseline_basic = baseline.get('basic_sensors', {})
+                light_basic = light_data.get('basic_sensors', {})
+                for sensor_id in baseline_basic.keys():
+                    if sensor_id in light_basic:
+                        basic_effect[sensor_id] = light_basic[sensor_id] - baseline_basic.get(sensor_id, 0)
+                self.light_controller.turn_off_light(light_id)
+                result = {
+                    'light_id': light_id,
+                    'basic_effect': basic_effect,
+                    'light_data': light_data,
+                    'spectrum_analysis': spectrum_analysis,
+                    'timestamp': datetime.now().isoformat(),
+                    'lux_stdev_percent': stdev_percent
+                }
+                print(f"Comprehensive calibration complete for {light_id} (stable), stdev_percent={stdev_percent:.2f}%")
+                return result
+            else:
+                mean_lux = sum(lux_values) / len(lux_values)
+                stddev_lux = statistics.stdev(lux_values)
+                if mean_lux > 0:
+                    percent = 100.0 * stddev_lux / mean_lux
+                    stdev_percent = percent
+                    print(f"Lux stability check: mean={mean_lux:.2f}, stddev={stddev_lux:.2f}, percent={percent:.2f}% (threshold {lux_stddev_percent}%)")
+                    if percent <= lux_stddev_percent:
+                        light_data = self._process_comprehensive_readings(light_readings)
+                        light_data['lux_stdev_percent'] = stdev_percent
+                        # Analyze spectrum characteristics
+                        spectrum_analysis = self.spectral_reader.analyze_light_spectrum(
+                            light_id, 
+                            baseline.get('spectral_sensors', {}),
+                            light_data.get('spectral_sensors', {})
+                        )
+                        # Calculate basic effects (for backward compatibility)
+                        basic_effect = {}
+                        baseline_basic = baseline.get('basic_sensors', {})
+                        light_basic = light_data.get('basic_sensors', {})
+                        for sensor_id in baseline_basic.keys():
+                            if sensor_id in light_basic:
+                                basic_effect[sensor_id] = light_basic[sensor_id] - baseline_basic.get(sensor_id, 0)
+                        self.light_controller.turn_off_light(light_id)
+                        result = {
+                            'light_id': light_id,
+                            'basic_effect': basic_effect,
+                            'light_data': light_data,
+                            'spectrum_analysis': spectrum_analysis,
+                            'timestamp': datetime.now().isoformat(),
+                            'lux_stdev_percent': stdev_percent
+                        }
+                        print(f"Comprehensive calibration complete for {light_id} (stable), stdev_percent={stdev_percent:.2f}%")
+                        return result
+                    else:
+                        print(f"Lux readings not steady (attempt {attempt+1}/{max_attempts}), retrying...")
+                else:
+                    print("Mean lux is zero, cannot check stability. Retrying...")
         self.light_controller.turn_off_light(light_id)
-        
-        result = {
-            'light_id': light_id,
-            'basic_effect': basic_effect,
-            'light_data': light_data,
-            'spectrum_analysis': spectrum_analysis,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        print(f"Comprehensive calibration complete for {light_id}")
-        return result
+        raise RuntimeError(f"Lux readings did not stabilize after {max_attempts} attempts. Calibration failed.")
         """Calibrate a single light by measuring its effect on all sensors."""
         print(f"Calibrating light: {light_id}")
         

@@ -4,6 +4,7 @@
 let currentZones = {};
 let selectedZoneKeys = new Set();
 let multiSelectMode = false;
+let userSettings = { temperature_unit: 'C', distance_unit: 'in', light_unit: 'lux' };
 
 // Helper: resolve grid container supporting legacy ID
 function getGridContainer() {
@@ -108,7 +109,21 @@ const cropPresets = {
 };
 let currentLights = {};
 let currentLightSensors = { config: { sensors: {} }, readings: {} };
-let gridSize = { rows: 4, cols: 6 };
+let gridSize = { rows: 24, cols: 12 }; // Default will be overridden by zones.json
+// Estimation settings (UI-backed)
+let estimationSettings = {
+    enabled: true,
+    power: 2,
+    maxSensors: 4,
+    maxDistance: 100
+};
+// Lux scaling settings (log mapping)
+let luxScaleSettings = {
+    maxLux: 100000,
+    softFloor: 50,
+    gamma: 2.0,
+    alpha: 1.0
+};
 
 // Device control functions
 function controlDevice(device, action) {
@@ -118,6 +133,12 @@ function controlDevice(device, action) {
             if (data.success) {
                 showNotification(`${device} turned ${action}`, 'success');
                 setTimeout(updateStatus, 1000); // Update status after 1 second
+                // If a light was toggled, trigger immediate sensor refresh
+                if (device.includes('light')) {
+                    if (typeof refreshLightSensorsOnce === 'function') {
+                        refreshLightSensorsOnce();
+                    }
+                }
             } else {
                 showNotification(`Failed to control ${device}: ${data.error}`, 'error');
             }
@@ -161,20 +182,33 @@ function updateStatusDisplay(status) {
     const soilCard = document.querySelector('.status-card:nth-child(4) .status-value');
 
     if (tempCard) {
-        tempCard.textContent = status.temperature_c ? 
-            status.temperature_c.toFixed(1) + '°C' : '--';
+        const tC = (status.temperature_c != null && !Number.isNaN(status.temperature_c)) ? Number(status.temperature_c) : null;
+        if (tC == null) {
+            tempCard.textContent = '--';
+        } else if ((userSettings.temperature_unit || 'C') === 'F') {
+            const f = (tC * 9/5) + 32;
+            tempCard.textContent = f.toFixed(1) + '°F';
+        } else {
+            tempCard.textContent = tC.toFixed(1) + '°C';
+        }
     }
     if (humCard) {
-        humCard.textContent = status.humidity ? 
-            status.humidity.toFixed(1) + '%' : '--';
+        humCard.textContent = (status.humidity != null && !Number.isNaN(status.humidity)) ?
+            Number(status.humidity).toFixed(1) + '%' : '--';
     }
     if (lightCard) {
-        lightCard.textContent = status.light_lux ? 
-            Math.round(status.light_lux) + ' lux' : '--';
+        const lightMode = (userSettings.light_unit || 'lux').toLowerCase();
+        if (lightMode === 'par') {
+            const v = status.light_ppfd != null ? Number(status.light_ppfd) : null;
+            lightCard.textContent = (v != null && !Number.isNaN(v)) ? Math.round(v) + ' µmol' : '--';
+        } else {
+            const v = status.light_lux != null ? Number(status.light_lux) : null;
+            lightCard.textContent = (v != null && !Number.isNaN(v)) ? Math.round(v) + ' lux' : '--';
+        }
     }
     if (soilCard) {
-        soilCard.textContent = status.soil_moisture ? 
-            Math.round(status.soil_moisture) + '%' : '--';
+        soilCard.textContent = (status.soil_moisture != null && !Number.isNaN(status.soil_moisture)) ? 
+            Math.round(Number(status.soil_moisture)) + '%' : '--';
     }
 }
 
@@ -189,7 +223,7 @@ function loadGreenhouseGrid(editable = false) {
         currentZones = zonesData;
         currentLights = lightsData;
         currentLightSensors = lightSensorsData || { config: { sensors: {} }, readings: {} };
-        gridSize = zonesData.grid_size || { rows: 4, cols: 6 };
+        gridSize = zonesData.grid_size || { rows: 24, cols: 12 };
         renderGrid(editable);
         
         // Render lights overlay after a short delay to ensure grid is rendered
@@ -207,6 +241,18 @@ function loadGreenhouseGrid(editable = false) {
 function renderGrid(editable = false) {
     const container = getGridContainer();
     if (!container) return;
+
+    // Performance check for very large grids
+    const totalCells = gridSize.rows * gridSize.cols;
+    if (totalCells > 2000) {
+        console.warn(`Large grid detected (${gridSize.rows}×${gridSize.cols} = ${totalCells} cells). Consider using smaller sections for better performance.`);
+    }
+    
+    // For very large grids, warn user about potential performance impact
+    if (totalCells > 5000 && editable) {
+        const proceed = confirm(`This grid size (${gridSize.rows}×${gridSize.cols} = ${totalCells} cells) may impact browser performance. Continue?`);
+        if (!proceed) return;
+    }
 
     // Clear the container; we'll re-add overlays later
     while (container.firstChild) container.removeChild(container.firstChild);
@@ -367,8 +413,11 @@ function renderLightFixtures(overlay, container) {
             Object.entries(currentLights.lights).forEach(([lightId, light]) => {
                 // Handle both old and new light data formats
                 const status = light.status || 'on';
-                const width = light.width_inches || 24;
-                const height = light.height_inches || 12;
+                const widthIn = light.width_inches || 24;
+                const depthIn = (light.depth_inches != null ? light.depth_inches : (light.height_inches || 12));
+                const du = (userSettings.distance_unit || 'in').toLowerCase();
+                const widthDisp = du === 'cm' ? Math.round(widthIn * 2.54) + 'cm' : `${widthIn}"`;
+                const depthDisp = du === 'cm' ? Math.round(depthIn * 2.54) + 'cm' : `${depthIn}"`;
                 
                 const lightElement = document.createElement('div');
                 lightElement.className = `light-fixture light-fixture-${status}`;
@@ -404,7 +453,7 @@ function renderLightFixtures(overlay, container) {
                 lightElement.innerHTML = `
                     <div class="light-info">
                         <div class="light-name">${light.name}</div>
-                        <div class="light-specs">${width}"×${height}" | ${light.power_watts}W</div>
+                        <div class="light-specs">${widthDisp}×${depthDisp} | ${light.power_watts}W</div>
                         <div class="light-status status-${status}">${status.toUpperCase()}</div>
                     </div>
                 `;
@@ -496,11 +545,19 @@ function renderSensorMarkers() {
         label.textContent = 'S';
         marker.appendChild(label);
 
-        const tt = document.createElement('div');
-        tt.className = 'tooltip';
-        const reading = currentLightSensors.readings?.[sid]?.lux;
-        tt.textContent = `${cfg.name || sid} • ${cfg.type || ''} • ${reading != null ? Math.round(reading) + ' lux' : '—'}`;
-        marker.appendChild(tt);
+    const tt = document.createElement('div');
+    tt.className = 'tooltip';
+    const mode = (userSettings.light_unit || 'lux').toLowerCase();
+    let readingStr = '—';
+    const readingLux = currentLightSensors.readings?.[sid]?.light_metrics?.lux?.value;
+    const readingPPFD = currentLightSensors.readings?.[sid]?.light_metrics?.PPFD?.value;
+    if (mode === 'par' && readingPPFD != null) {
+        readingStr = Math.round(readingPPFD) + ' µmol';
+    } else if (readingLux != null) {
+        readingStr = Math.round(readingLux) + ' lux';
+    }
+    tt.textContent = `${cfg.name || sid} • ${cfg.type || ''} • ${readingStr}`;
+    marker.appendChild(tt);
 
         overlay.appendChild(marker);
     }
@@ -522,88 +579,136 @@ function renderLightAmountOverlay() {
     const gapVal = cs.gap || `${cs.rowGap || 0} ${cs.columnGap || 0}`;
     if (gapVal) overlay.style.gap = gapVal;
     
-    // Calculate light amount for each grid cell
+    // Calculate light amount for each grid cell (sensor-only)
+    const lightMode = (userSettings.light_unit || 'lux').toLowerCase();
     for (let row = 0; row < gridSize.rows; row++) {
         for (let col = 0; col < gridSize.cols; col++) {
             const lightAmount = calculateLightAmount(row, col);
             const cell = document.createElement('div');
-            cell.className = `light-amount-cell light-intensity-${lightAmount.intensity}`;
-            
-            // Add spectrum-based color if significant spectrum deviation
-            const spectrumColor = getSpectrumColor(lightAmount.spectrum);
-            if (spectrumColor) {
-                cell.style.backgroundColor = spectrumColor;
+            if (!lightAmount) {
+                cell.className = 'light-amount-cell no-data';
+                overlay.appendChild(cell);
+                continue;
             }
-            
-            const readingText = lightAmount.source === 'sensor' ? `${lightAmount.lux} (sensor)` : `${lightAmount.lux}`;
+            cell.className = `light-amount-cell light-intensity-${lightAmount.intensity}`;
+
+            let displayValue, colorValue, colorText, colorAlpha = luxScaleSettings.alpha;
+            if (lightMode === 'par' && lightAmount.ppfd != null) {
+                // PPFD mode: color by PPFD, display PPFD value
+                displayValue = `${lightAmount.ppfd} µmol`;
+                // Color scale: blue (low) to green (mid) to yellow (high)
+                colorValue = ppfdToColor(lightAmount.ppfd);
+                colorText = getTextColorForBackground(colorValue, colorAlpha);
+                cell.style.backgroundColor = `rgba(${colorValue.r}, ${colorValue.g}, ${colorValue.b}, ${colorAlpha})`;
+            } else {
+                // Lux mode (default)
+                displayValue = lightAmount.lux;
+                const cct = Number.isFinite(lightAmount.colorTemp) ? lightAmount.colorTemp : 4500;
+                const baseRgb = cctToRgb(cct);
+                const scaledRgb = scaleRgbByLuxLog(baseRgb, lightAmount.lux, luxScaleSettings);
+                colorValue = scaledRgb;
+                colorText = getTextColorForBackground(scaledRgb, colorAlpha);
+                cell.style.backgroundColor = `rgba(${scaledRgb.r}, ${scaledRgb.g}, ${scaledRgb.b}, ${colorAlpha})`;
+            }
+
+            // Sensor vs estimated reading display
+            let displayInfo;
+            if (lightAmount.source === 'sensor') {
+                displayInfo = `
+                    <div class="sensor-reading">
+                        <div class="lux-value" style="color: ${colorText}; text-decoration: underline;">${displayValue}</div>
+                    </div>
+                `;
+            } else if (lightAmount.source === 'estimated') {
+                displayInfo = `
+                    <div class="estimated-reading">
+                        <div class="lux-value" style="color: ${colorText}"><em>${displayValue}</em></div>
+                    </div>
+                `;
+            } else {
+                displayInfo = '';
+            }
+
             cell.innerHTML = `
                 <div class="light-amount-info">
-                    ${readingText}
+                    ${displayInfo}
                 </div>
             `;
-            
             overlay.appendChild(cell);
         }
     }
     
     // Append under container; with z-index it will sit below fixtures and sensors
     container.appendChild(overlay);
+// --- PPFD color scale helper ---
+function ppfdToColor(ppfd) {
+    // Blue (low) → Green (mid) → Yellow (high)
+    // 0-100: blue, 100-300: green, 300-600: yellow, >600: orange
+    if (ppfd <= 100) return { r: 60, g: 120, b: 255 };
+    if (ppfd <= 300) {
+        // interpolate blue→green
+        const t = (ppfd - 100) / 200;
+        return {
+            r: Math.round(60 + t * (60)),
+            g: Math.round(120 + t * (135)),
+            b: Math.round(255 - t * (135))
+        };
+    }
+    if (ppfd <= 600) {
+        // interpolate green→yellow
+        const t = (ppfd - 300) / 300;
+        return {
+            r: Math.round(120 + t * (135)),
+            g: Math.round(255 - t * (55)),
+            b: Math.round(120 - t * (120))
+        };
+    }
+    // >600: orange
+    return { r: 255, g: 200, b: 60 };
+}
+// (Global unit toggle is in Settings; no inline PPFD toggle here anymore)
 }
 
 function calculateLightAmount(row, col) {
-    let totalLux = 0;
-    let totalRed = 0;
-    let totalBlue = 0;
-    let totalWhite = 0;
-    let lightCount = 0;
-    
-    // Base ambient light (simulated)
-    const ambientLux = 50; // Base indoor lighting
-    totalLux += ambientLux;
-    
-    // Check contribution from each light fixture
-    if (currentLights.lights) {
-        Object.values(currentLights.lights).forEach(light => {
-            if (light.status === 'on') {
-                const distance = getLightDistance(row, col, light.position);
-                const contribution = getLightContribution(light, distance);
-                
-                if (contribution.lux > 0) {
-                    totalLux += contribution.lux;
-                    totalRed += contribution.red;
-                    totalBlue += contribution.blue;
-                    totalWhite += contribution.white;
-                    lightCount++;
-                }
-            }
-        });
-    }
-    
-    // Use configured sensor reading if available for this cell
-    const sensorReading = getConfiguredSensorReading(row, col);
-    if (sensorReading != null) {
-        totalLux = Math.max(totalLux, sensorReading);
+    // Use ONLY actual sensor reading if available for this cell
+    const sensorData = getConfiguredSensorReading(row, col);
+    if (sensorData && sensorData.lux != null) {
+        const spectrum = sensorData.bands ? {
+            red: sensorData.bands.red?.value || 33,
+            blue: sensorData.bands.blue?.value || 33,
+            green: sensorData.bands.green?.value || 33
+        } : { red: 33, blue: 33, green: 33 };
+
         return {
-            lux: Math.round(totalLux),
-            intensity: Math.min(9, Math.floor(totalLux / 100)),
-            spectrum: { red: totalRed || 33, blue: totalBlue || 33, white: totalWhite || 33 },
-            source: 'sensor'
+            lux: Math.round(sensorData.lux),
+            intensity: Math.min(9, Math.floor(sensorData.lux / 100)),
+            spectrum: spectrum,
+            source: 'sensor',
+            sensorName: sensorData.name,
+            colorTemp: sensorData.color_temp,
+            ppfd: sensorData.ppfd
         };
     }
-    
-    // Calculate average spectrum
-    const spectrum = lightCount > 0 ? {
-        red: totalRed / lightCount,
-        blue: totalBlue / lightCount,
-        white: totalWhite / lightCount
-    } : { red: 33, blue: 33, white: 33 };
-    
-    return {
-        lux: Math.round(totalLux),
-        intensity: Math.min(9, Math.floor(totalLux / 100)), // 0-9 scale
-        spectrum: spectrum,
-        source: 'predicted'
-    };
+    // No direct sensor coverage for this cell — estimate from other sensors if enabled
+    if (!estimationSettings.enabled) return null;
+    const est = estimateLightFromSensors(row, col, {
+        power: estimationSettings.power,
+        maxSensors: estimationSettings.maxSensors,
+        maxDistance: estimationSettings.maxDistance
+    });
+    if (est) {
+        return {
+            lux: Math.round(est.lux),
+            intensity: Math.min(9, Math.floor(est.lux / 100)),
+            spectrum: est.spectrum || { red: 33, blue: 33, green: 33 },
+            source: 'estimated',
+            colorTemp: est.color_temp || null,
+            ppfd: est.ppfd != null ? Math.round(est.ppfd) : null,
+            sensorCount: est.sensorCount
+        };
+    }
+    // Not enough data to estimate
+    return null;
 }
 
 function getLightDistance(row, col, lightPos) {
@@ -636,29 +741,185 @@ function getLightContribution(light, distance) {
 function getConfiguredSensorReading(row, col) {
     if (!currentLightSensors || !currentLightSensors.readings) return null;
     const key = `${row}-${col}`;
+    
     // Find any sensor mapped to this zone_key
     for (const [sid, cfg] of Object.entries(currentLightSensors.config?.sensors || {})) {
         if (cfg.zone_key === key) {
             const reading = currentLightSensors.readings[sid];
-            if (reading && reading.lux != null) return reading.lux;
+            if (reading && reading.light_metrics?.lux?.value != null) {
+                return {
+                    lux: reading.light_metrics.lux.value,
+                    color_temp: reading.light_metrics?.color_temp?.value,
+                    ppfd: reading.light_metrics?.PPFD?.value,
+                    bands: reading.bands,
+                    name: cfg.name || sid,
+                    type: cfg.type
+                };
+            }
         }
     }
     return null;
 }
 
+function findNearbySensorReading(targetRow, targetCol, maxDistance) {
+    if (!currentLightSensors || !currentLightSensors.readings) return null;
+    
+    let closestSensor = null;
+    let closestDistance = Infinity;
+    
+    // Check all configured sensors
+    for (const [sid, cfg] of Object.entries(currentLightSensors.config?.sensors || {})) {
+        if (!cfg.zone_key) continue;
+        
+        const [rowStr, colStr] = cfg.zone_key.split('-');
+        const sensorRow = parseInt(rowStr, 10);
+        const sensorCol = parseInt(colStr, 10);
+        
+        if (isNaN(sensorRow) || isNaN(sensorCol)) continue;
+        
+        // Calculate distance from target cell
+        const distance = Math.sqrt(
+            Math.pow(targetRow - sensorRow, 2) + Math.pow(targetCol - sensorCol, 2)
+        );
+        
+        // Skip if too far or closer sensor already found
+        if (distance > maxDistance || distance >= closestDistance) continue;
+        
+        const reading = currentLightSensors.readings[sid];
+        if (reading && reading.light_metrics?.lux?.value != null) {
+            closestDistance = distance;
+            closestSensor = {
+                lux: reading.light_metrics.lux.value,
+                color_temp: reading.light_metrics?.color_temp?.value,
+                ppfd: reading.light_metrics?.PPFD?.value,
+                bands: reading.bands,
+                name: cfg.name || sid,
+                type: cfg.type,
+                distance: distance
+            };
+        }
+    }
+    
+    return closestSensor;
+}
+
+// Estimate light metrics for a cell using inverse-distance weighting from available sensors
+function estimateLightFromSensors(targetRow, targetCol, options = {}) {
+    if (!currentLightSensors || !currentLightSensors.readings) return null;
+    const power = options.power ?? 2; // IDW power parameter
+    const maxSensors = options.maxSensors ?? 4; // use up to N nearest sensors
+    const maxDistance = options.maxDistance ?? Infinity; // in grid cells
+    const minSensors = options.minSensors ?? 1; // require at least this many sensors to estimate
+
+    const sensors = [];
+    for (const [sid, cfg] of Object.entries(currentLightSensors.config?.sensors || {})) {
+        if (!cfg.zone_key) continue;
+        const [rowStr, colStr] = cfg.zone_key.split('-');
+        const sRow = parseInt(rowStr, 10);
+        const sCol = parseInt(colStr, 10);
+        if (isNaN(sRow) || isNaN(sCol)) continue;
+
+        const reading = currentLightSensors.readings[sid];
+        const luxVal = reading?.light_metrics?.lux?.value;
+        if (luxVal == null) continue;
+
+        const dist = Math.sqrt(Math.pow(targetRow - sRow, 2) + Math.pow(targetCol - sCol, 2));
+        if (dist > maxDistance) continue;
+
+        sensors.push({
+            id: sid,
+            distance: dist,
+            lux: luxVal,
+            ppfd: reading?.light_metrics?.PPFD?.value,
+            color_temp: reading?.light_metrics?.color_temp?.value,
+            bands: reading?.bands
+        });
+    }
+
+    if (sensors.length < minSensors) return null;
+
+    // If a sensor is exactly at this cell, caller would have handled it; guard anyway
+    const exact = sensors.find(s => s.distance === 0);
+    if (exact) {
+        return {
+            lux: exact.lux,
+            ppfd: exact.ppfd,
+            color_temp: exact.color_temp,
+            spectrum: bandsToSpectrum(exact.bands),
+            sensorCount: 1
+        };
+    }
+
+    // Sort by distance and take up to maxSensors
+    sensors.sort((a, b) => a.distance - b.distance);
+    const selected = sensors.slice(0, maxSensors);
+    let wSum = 0;
+    let luxSum = 0;
+    let ppfdSum = 0;
+    let ppfdCount = 0;
+    let ctSum = 0;
+    let ctCount = 0;
+    let redSum = 0, blueSum = 0, greenSum = 0;
+    let bandCount = 0;
+
+    for (const s of selected) {
+        const d = Math.max(s.distance, 0.001); // avoid division by zero
+        const w = 1 / Math.pow(d, power);
+        wSum += w;
+        luxSum += w * s.lux;
+        if (s.ppfd != null) { ppfdSum += w * s.ppfd; ppfdCount += w; }
+        if (s.color_temp != null) { ctSum += w * s.color_temp; ctCount += w; }
+        if (s.bands) {
+            const r = s.bands.red?.value ?? 33;
+            const b = s.bands.blue?.value ?? 33;
+            const g = s.bands.green?.value ?? 33;
+            redSum += w * r;
+            blueSum += w * b;
+            greenSum += w * g;
+            bandCount += w;
+        }
+    }
+
+    if (wSum === 0) return null;
+    const est = {
+        lux: luxSum / wSum,
+        ppfd: ppfdCount ? (ppfdSum / ppfdCount) : null,
+        color_temp: ctCount ? (ctSum / ctCount) : null,
+        spectrum: bandCount ? {
+            red: redSum / bandCount,
+            blue: blueSum / bandCount,
+            green: greenSum / bandCount
+        } : { red: 33, blue: 33, green: 33 },
+        sensorCount: selected.length
+    };
+    return est;
+}
+
+function bandsToSpectrum(bands) {
+    if (!bands) return { red: 33, blue: 33, green: 33 };
+    return {
+        red: bands.red?.value ?? 33,
+        blue: bands.blue?.value ?? 33,
+        green: bands.green?.value ?? 33
+    };
+}
+
 function getSpectrumColor(spectrum) {
     // Only apply spectrum color if significantly different from balanced white
-    const balanced = { red: 33, blue: 33, white: 33 };
+    const balanced = { red: 33, blue: 33, green: 33, white: 33 };
     const threshold = 15; // Significant deviation threshold
     
-    const redDiff = Math.abs(spectrum.red - balanced.red);
-    const blueDiff = Math.abs(spectrum.blue - balanced.blue);
+    const red = spectrum.red ?? 33;
+    const blue = spectrum.blue ?? 33;
+    const whiteOrGreen = spectrum.white ?? spectrum.green ?? 33;
+    const redDiff = Math.abs(red - balanced.red);
+    const blueDiff = Math.abs(blue - balanced.blue);
     
     if (redDiff > threshold || blueDiff > threshold) {
         // Calculate color based on spectrum
-        const r = Math.min(255, Math.round(spectrum.red * 2.55));
-        const g = Math.min(255, Math.round(spectrum.white * 2.55));
-        const b = Math.min(255, Math.round(spectrum.blue * 2.55));
+        const r = Math.min(255, Math.round(red * 2.55));
+        const g = Math.min(255, Math.round(whiteOrGreen * 2.55));
+        const b = Math.min(255, Math.round(blue * 2.55));
         
         return `rgba(${r}, ${g}, ${b}, 0.3)`;
     }
@@ -666,33 +927,128 @@ function getSpectrumColor(spectrum) {
     return null; // Use default intensity color
 }
 
+// Convert color temperature (Kelvin) to approximate RGB for visualization
+// Uses a common approximation valid for ~1000K to 40000K
+function cctToRgb(kelvin) {
+    let temp = kelvin / 100;
+    let r, g, b;
+
+    // Red
+    if (temp <= 66) {
+        r = 255;
+    } else {
+        r = temp - 60;
+        r = 329.698727446 * Math.pow(r, -0.1332047592);
+        r = Math.min(255, Math.max(0, r));
+    }
+
+    // Green
+    if (temp <= 66) {
+        g = 99.4708025861 * Math.log(temp) - 161.1195681661;
+    } else {
+        g = temp - 60;
+        g = 288.1221695283 * Math.pow(g, -0.0755148492);
+    }
+    g = Math.min(255, Math.max(0, g));
+
+    // Blue
+    if (temp >= 66) {
+        b = 255;
+    } else if (temp <= 19) {
+        b = 0;
+    } else {
+        b = temp - 10;
+        b = 138.5177312231 * Math.log(b) - 305.0447927307;
+        b = Math.min(255, Math.max(0, b));
+    }
+
+    return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+}
+
+// Map lux to alpha transparency for overlay brightness
+// Calibrated for typical greenhouse ranges; clamp between 0.1 and 0.35 (less opaque)
+function luxToAlpha(lux) {
+    if (!Number.isFinite(lux)) return 0.25;
+    // Example mapping: 0 lux -> 0.1 alpha, 1000 lux -> ~0.17, 5000 lux -> ~0.35
+    const maxLux = 5000;
+    const normalized = Math.min(1, Math.max(0, lux / maxLux));
+    return 0.10 + normalized * (0.35 - 0.10);
+}
+
+// Scale RGB by lux similar to the provided Python function
+// scale = min(lux / max_lux, 1.0); return (int(r*scale), int(g*scale), int(b*scale))
+function scaleRgbByLux(rgb, lux, maxLux = 100000) {
+    const scale = Math.min(Math.max((Number(lux) || 0) / maxLux, 0), 1);
+    return {
+        r: Math.round(rgb.r * scale),
+        g: Math.round(rgb.g * scale),
+        b: Math.round(rgb.b * scale)
+    };
+}
+
+// Hybrid log10 scaling with soft floor and gamma
+function logLuxScale(lux, { maxLux, softFloor, gamma }) {
+    const L0 = Math.max(1, Number(softFloor) || 1);
+    const Lmax = Math.max(L0 + 1, Number(maxLux) || 100000);
+    const L = Math.max(0, Number(lux) || 0);
+    const s = (Math.log10(L + L0) - Math.log10(L0)) / (Math.log10(Lmax + L0) - Math.log10(L0));
+    const clamped = Math.min(1, Math.max(0, s));
+    const g = Math.max(0.1, Number(gamma) || 1);
+    return Math.pow(clamped, g);
+}
+
+function scaleRgbByLuxLog(rgb, lux, settings) {
+    const scale = logLuxScale(lux, settings);
+    return {
+        r: Math.round(rgb.r * scale),
+        g: Math.round(rgb.g * scale),
+        b: Math.round(rgb.b * scale)
+    };
+}
+
+// Choose readable text color for a semi-transparent background over a light grid
+function getTextColorForBackground(rgb, alpha) {
+    // Blend background rgb over the base grid color (#f9f9f9) to get perceived color
+    const base = { r: 249, g: 249, b: 249 };
+    const r = Math.round((1 - alpha) * base.r + alpha * rgb.r);
+    const g = Math.round((1 - alpha) * base.g + alpha * rgb.g);
+    const b = Math.round((1 - alpha) * base.b + alpha * rgb.b);
+    // Compute relative luminance
+    const srgbToLin = (c) => {
+        c /= 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * srgbToLin(r) + 0.7152 * srgbToLin(g) + 0.0722 * srgbToLin(b);
+    // Return dark text when background is light, and white text when background is dark
+    return L > 0.6 ? '#222' : '#fff';
+}
+
 function toggleLight(lightId, light) {
-    const currentStatus = light.status || 'on'; // Default to 'on' for old lights
-    const newStatus = currentStatus === 'on' ? 'off' : 'on';
-    
-    // Update local data
-    currentLights.lights[lightId].status = newStatus;
-    
-    // Save to server
-    fetch('/api/lights', {
+    const current = (currentLights.lights && currentLights.lights[lightId]) ? currentLights.lights[lightId] : light || {};
+    const currentStatus = current.status || 'off';
+    const action = currentStatus === 'on' ? 'off' : 'on';
+
+    fetch(`/api/lights/${lightId}/control`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(currentLights)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         if (data.success) {
-            showNotification(`${light.name} turned ${newStatus}`, 'success');
-            renderLightsOverlay(); // Re-render to update status
+            if (!currentLights.lights) currentLights.lights = {};
+            if (!currentLights.lights[lightId]) currentLights.lights[lightId] = {};
+            currentLights.lights[lightId].status = action;
+            showNotification(`${current.name || 'Light'} turned ${action}`, 'success');
+            renderLightsOverlay();
+            renderLightsTable();
         } else {
-            showNotification('Failed to update light status', 'error');
+            showNotification(`Light control failed: ${data.error || 'unknown error'}`, 'error');
         }
     })
-    .catch(error => {
-        showNotification('Error updating light status', 'error');
-        console.error('Error:', error);
+    .catch(err => {
+        showNotification(`Control error: ${err}`, 'error');
+        console.error('Light control error:', err);
     });
 }
 
@@ -843,14 +1199,28 @@ function closeZoneConfig() {
 }
 
 function resizeGrid() {
-    const rows = parseInt(document.getElementById('gridRows').value) || 4;
-    const cols = parseInt(document.getElementById('gridCols').value) || 6;
+    const rows = parseInt(document.getElementById('gridRows').value) || 24;
+    const cols = parseInt(document.getElementById('gridCols').value) || 12;
+    
+    // Validate grid size bounds
+    if (rows < 1 || rows > 100 || cols < 1 || cols > 100) {
+        showNotification('Grid size must be between 1×1 and 100×100', 'error');
+        return;
+    }
+    
+    const totalCells = rows * cols;
+    
+    // Warn for very large grids
+    if (totalCells > 5000) {
+        const proceed = confirm(`Large grid (${rows}×${cols} = ${totalCells} cells) may impact performance. Continue?`);
+        if (!proceed) return;
+    }
     
     gridSize = { rows, cols };
     currentZones.grid_size = gridSize;
     
     renderGrid(true);
-    showNotification(`Grid resized to ${rows}×${cols}`, 'success');
+    showNotification(`Grid resized to ${rows}×${cols} (${totalCells} cells)`, 'success');
 }
 
 function saveZones() {
@@ -1148,7 +1518,7 @@ function addNewLight() {
         document.getElementById('lightForm').reset();
         document.getElementById('lightName').value = 'New Light Fixture';
         document.getElementById('lightWidth').value = 24;
-        document.getElementById('lightHeight').value = 12;
+    document.getElementById('lightDepth').value = 12;
         document.getElementById('lightPower').value = 100;
         document.getElementById('dimmingLevel').value = 100;
         document.getElementById('positionRow').value = 0;
@@ -1160,6 +1530,65 @@ function addNewLight() {
         document.getElementById('lightWhitePercent').value = 40;
         updateLightSpectrumTotal();
     }
+}
+
+function buildControlConfig() {
+    const controlType = document.getElementById('controlType').value;
+    
+    if (controlType === 'none') {
+        return {
+            type: 'none',
+            description: 'No hardware control configured'
+        };
+    } else if (controlType === 'gpio') {
+        const pin = parseInt(document.getElementById('gpioPin').value);
+        const activeLow = !!document.getElementById('gpioActiveLow').checked;
+        return {
+            type: 'gpio',
+            pin: pin || null,
+            active_low: activeLow,
+            description: pin ? `GPIO pin ${pin} for on/off control` : 'GPIO pin not configured'
+        };
+    } else if (controlType === 'pwm') {
+        const pin = parseInt(document.getElementById('pwmPin').value);
+        const frequency = parseInt(document.getElementById('pwmFrequency').value) || 1000;
+        return {
+            type: 'pwm',
+            pin: pin || null,
+            frequency: frequency,
+            description: pin ? `PWM pin ${pin} at ${frequency}Hz for dimming` : 'PWM pin not configured'
+        };
+    } else if (controlType === 'rgb') {
+        const redPin = parseInt(document.getElementById('redPin').value);
+        const greenPin = parseInt(document.getElementById('greenPin').value);
+        const bluePin = parseInt(document.getElementById('bluePin').value);
+        return {
+            type: 'rgb',
+            pins: {
+                red: redPin || null,
+                green: greenPin || null,
+                blue: bluePin || null
+            },
+            description: (redPin && greenPin && bluePin) 
+                ? `RGB control on pins R:${redPin}, G:${greenPin}, B:${bluePin}`
+                : 'RGB pins not fully configured'
+        };
+    } else if (controlType === 'i2c') {
+        const address = document.getElementById('i2cAddress').value;
+        const bus = parseInt(document.getElementById('i2cBus').value) || 1;
+        const device = document.getElementById('i2cDevice').value;
+        return {
+            type: 'i2c',
+            address: address || null,
+            bus: bus,
+            device: device || 'Unknown',
+            description: address 
+                ? `I2C device ${device || 'Unknown'} at ${address} on bus ${bus}`
+                : 'I2C address not configured'
+        };
+    }
+    
+    return { type: 'none', description: 'Unknown control type' };
 }
 
 function applyLightConfig() {
@@ -1182,8 +1611,8 @@ function applyLightConfig() {
     currentLights.lights[selectedLightKey] = {
         name: name,
         type: type,
-        width_inches: parseInt(document.getElementById('lightWidth').value) || 24,
-        height_inches: parseInt(document.getElementById('lightHeight').value) || 12,
+    width_inches: parseInt(document.getElementById('lightWidth').value) || 24,
+    depth_inches: parseInt(document.getElementById('lightDepth').value) || 12,
         position: {
             row: parseInt(document.getElementById('positionRow').value) || 0,
             col: parseInt(document.getElementById('positionCol').value) || 0,
@@ -1198,7 +1627,8 @@ function applyLightConfig() {
         },
         dimming_level: parseInt(document.getElementById('dimmingLevel').value) || 100,
         status: 'on',
-        notes: document.getElementById('lightNotes').value
+        notes: document.getElementById('lightNotes').value,
+        control: buildControlConfig()
     };
     
     // Re-render lights
@@ -1230,6 +1660,40 @@ function closeLightConfig() {
     selectedLightKey = null;
 }
 
+function loadControlConfig(control) {
+    const controlType = control.type || 'none';
+    document.getElementById('controlType').value = controlType;
+    
+    // Clear all control fields first
+    const fields = ['gpioPin', 'pwmPin', 'pwmFrequency', 'redPin', 'greenPin', 'bluePin', 'i2cAddress', 'i2cBus', 'i2cDevice'];
+    fields.forEach(field => {
+        const element = document.getElementById(field);
+        if (element) element.value = '';
+    });
+    
+    // Load specific control configuration
+    if (controlType === 'gpio' && control.pin) {
+        document.getElementById('gpioPin').value = control.pin;
+        document.getElementById('gpioActiveLow').checked = !!control.active_low;
+    } else if (controlType === 'pwm') {
+        if (control.pin) document.getElementById('pwmPin').value = control.pin;
+        if (control.frequency) document.getElementById('pwmFrequency').value = control.frequency;
+    } else if (controlType === 'rgb' && control.pins) {
+        if (control.pins.red) document.getElementById('redPin').value = control.pins.red;
+        if (control.pins.green) document.getElementById('greenPin').value = control.pins.green;
+        if (control.pins.blue) document.getElementById('bluePin').value = control.pins.blue;
+    } else if (controlType === 'i2c') {
+        if (control.address) document.getElementById('i2cAddress').value = control.address;
+        if (control.bus) document.getElementById('i2cBus').value = control.bus;
+        if (control.device) document.getElementById('i2cDevice').value = control.device;
+    }
+    
+    // Update control field visibility
+    if (typeof updateControlFields === 'function') {
+        updateControlFields();
+    }
+}
+
 function editLight(lightId) {
     selectedLightKey = lightId;
     const light = currentLights.lights[lightId];
@@ -1245,8 +1709,8 @@ function editLight(lightId) {
         // Load light data into form
         document.getElementById('lightName').value = light.name || '';
         document.getElementById('lightType').value = light.type || 'LED Panel';
-        document.getElementById('lightWidth').value = light.width_inches || 24;
-        document.getElementById('lightHeight').value = light.height_inches || 12;
+    document.getElementById('lightWidth').value = light.width_inches || 24;
+    document.getElementById('lightDepth').value = (light.depth_inches != null ? light.depth_inches : (light.height_inches || 12));
         document.getElementById('lightPower').value = light.power_watts || 100;
         document.getElementById('dimmingLevel').value = light.dimming_level || 100;
         document.getElementById('positionRow').value = light.position.row || 0;
@@ -1257,6 +1721,10 @@ function editLight(lightId) {
         document.getElementById('lightBluePercent').value = light.spectrum.blue_percent || 20;
         document.getElementById('lightWhitePercent').value = light.spectrum.white_percent || 40;
         document.getElementById('lightNotes').value = light.notes || '';
+        
+        // Load control configuration
+        loadControlConfig(light.control || {});
+        
         updateLightSpectrumTotal();
     }
 }
@@ -1288,8 +1756,8 @@ function renderLightsTable() {
     
     Object.entries(currentLights.lights).forEach(([lightId, light]) => {
         // Handle both old and new light data formats
-        const width = light.width_inches || 24;
-        const height = light.height_inches || 12;
+    const width = light.width_inches || 24;
+    const depth = (light.depth_inches != null ? light.depth_inches : (light.height_inches || 12));
         const rowSpan = light.position.row_span || 1;
         const colSpan = light.position.col_span || 1;
         const status = light.status || 'on';
@@ -1298,7 +1766,7 @@ function renderLightsTable() {
             <tr>
                 <td><strong>${light.name}</strong></td>
                 <td>${light.type}</td>
-                <td>${width}"×${height}"</td>
+                <td>${width}"×${depth}"</td>
                 <td>R${light.position.row} C${light.position.col} (${rowSpan}×${colSpan})</td>
                 <td>${light.power_watts}W</td>
                 <td><span class="status status-${status}">${status.toUpperCase()}</span></td>
@@ -1376,6 +1844,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const showLightFixtures = document.getElementById('showLightFixtures');
     const showLightAmount = document.getElementById('showLightAmount');
     const showSensorMarkers = document.getElementById('showSensorMarkers');
+    const enableEstimation = document.getElementById('enableEstimation');
+    const estPower = document.getElementById('estPower');
+    const estMaxSensors = document.getElementById('estMaxSensors');
+    const estMaxDistance = document.getElementById('estMaxDistance');
+    const luxMaxLux = document.getElementById('luxMaxLux');
+    const luxSoftFloor = document.getElementById('luxSoftFloor');
+    const luxGamma = document.getElementById('luxGamma');
+    const luxAlpha = document.getElementById('luxAlpha');
+    const luxAlphaValue = document.getElementById('luxAlphaValue');
     
     if (showLightFixtures) {
         showLightFixtures.addEventListener('change', function() {
@@ -1388,6 +1865,10 @@ document.addEventListener('DOMContentLoaded', function() {
         showLightAmount.addEventListener('change', function() {
             console.log('Light amount toggle changed to:', this.checked);
             renderLightsOverlay();
+            // If enabling the overlay, pull fresh sensor data for quicker updates
+            if (this.checked && typeof refreshLightSensorsOnce === 'function') {
+                refreshLightSensorsOnce();
+            }
         });
     }
     if (showSensorMarkers) {
@@ -1396,8 +1877,121 @@ document.addEventListener('DOMContentLoaded', function() {
             renderLightsOverlay();
         });
     }
+    // Estimation controls wiring
+    function updateEstimationSettings() {
+        estimationSettings.enabled = enableEstimation ? !!enableEstimation.checked : true;
+        estimationSettings.power = estPower && !isNaN(parseFloat(estPower.value)) ? parseFloat(estPower.value) : 2;
+        estimationSettings.maxSensors = estMaxSensors && !isNaN(parseInt(estMaxSensors.value)) ? parseInt(estMaxSensors.value) : 4;
+        estimationSettings.maxDistance = estMaxDistance && !isNaN(parseInt(estMaxDistance.value)) ? parseInt(estMaxDistance.value) : 100;
+        if (showLightAmount && showLightAmount.checked) {
+            renderLightAmountOverlay();
+        }
+    }
+    if (enableEstimation) enableEstimation.addEventListener('change', updateEstimationSettings);
+    if (estPower) estPower.addEventListener('input', updateEstimationSettings);
+    if (estMaxSensors) estMaxSensors.addEventListener('input', updateEstimationSettings);
+    if (estMaxDistance) estMaxDistance.addEventListener('input', updateEstimationSettings);
+    // Initialize from current UI values on load
+    updateEstimationSettings();
+
+    // Lux scaling controls wiring
+    function updateLuxScaleSettings() {
+        luxScaleSettings.maxLux = luxMaxLux && !isNaN(parseInt(luxMaxLux.value)) ? parseInt(luxMaxLux.value) : 100000;
+        luxScaleSettings.softFloor = luxSoftFloor && !isNaN(parseInt(luxSoftFloor.value)) ? parseInt(luxSoftFloor.value) : 50;
+        luxScaleSettings.gamma = luxGamma && !isNaN(parseFloat(luxGamma.value)) ? parseFloat(luxGamma.value) : 2.0;
+        luxScaleSettings.alpha = luxAlpha && !isNaN(parseFloat(luxAlpha.value)) ? parseFloat(luxAlpha.value) : 1.0;
+        
+        // Update the alpha display value
+        if (luxAlphaValue) {
+            luxAlphaValue.textContent = luxScaleSettings.alpha.toFixed(2);
+        }
+        
+        if (showLightAmount && showLightAmount.checked) {
+            renderLightAmountOverlay();
+        }
+    }
+    if (luxMaxLux) luxMaxLux.addEventListener('input', updateLuxScaleSettings);
+    if (luxSoftFloor) luxSoftFloor.addEventListener('input', updateLuxScaleSettings);
+    if (luxGamma) luxGamma.addEventListener('input', updateLuxScaleSettings);
+    if (luxAlpha) luxAlpha.addEventListener('input', updateLuxScaleSettings);
+    updateLuxScaleSettings();
     
     // Zones are always shown; no toggle handler needed
+});
+
+// --- Live light-sensor refresh (dashboard + lights page) ---
+function refreshLightSensorsOnce() {
+    return fetch('/api/light-sensors')
+        .then(r => r.json())
+        .then(data => {
+            // Update global cache
+            currentLightSensors = data || { config: { sensors: {} }, readings: {} };
+
+            // Ensure overlays exist before rendering
+            const container = getGridContainer();
+            if (container) ensureOverlays(container);
+
+            // If on dashboard or zones view with overlays, refresh markers and (optionally) light map
+            const showSensorMarkers = document.getElementById('showSensorMarkers');
+            if (!showSensorMarkers || showSensorMarkers.checked) {
+                renderSensorMarkers();
+            }
+            const showLightAmount = document.getElementById('showLightAmount');
+            if (showLightAmount && showLightAmount.checked) {
+                renderLightAmountOverlay();
+            }
+
+            // If on lights page, update sensor readings without rebuilding form controls
+            if (document.getElementById('lightSensorsTable')) {
+                // Use updateSensorReadings if it exists (lights page), otherwise renderLightSensorsTable
+                if (typeof updateSensorReadings === 'function') {
+                    updateSensorReadings();
+                } else {
+                    // Check if any dropdown is currently open before full refresh
+                    const hasActiveDropdown = document.querySelector('#lightSensorsTable select:focus') || 
+                                            document.querySelector('#lightSensorsTable input:focus');
+                    if (!hasActiveDropdown) {
+                        renderLightSensorsTable();
+                    }
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Failed to refresh light sensors:', err);
+        });
+}
+
+function scheduleLightSensorRefresh() {
+    // Only schedule if we have a grid or a sensors table present
+    if (!getGridContainer() && !document.getElementById('lightSensorsTable')) return;
+
+    // Get update cadence from backend; fall back to 10s
+    fetch('/api/frontend-config')
+        .then(r => r.json())
+        .then(cfg => {
+            const interval = Math.max(1000, Number(cfg.update_interval_ms) || 10000);
+            if (cfg && cfg.user_settings) {
+                userSettings = cfg.user_settings;
+                try { window.userSettings = userSettings; } catch(_) {}
+            }
+            // Initial refresh to get fresh readings after page load
+            refreshLightSensorsOnce();
+            // Periodic refresh
+            setInterval(refreshLightSensorsOnce, interval);
+            console.log(`Light sensors will refresh every ${interval}ms`);
+        })
+        .catch(() => {
+            // Safe default
+            refreshLightSensorsOnce();
+            setInterval(refreshLightSensorsOnce, 10000);
+            console.log('Light sensors will refresh every 10000ms (default)');
+        });
+}
+
+// Start auto-refresh shortly after DOM ready so initial grid/render has occurred
+document.addEventListener('DOMContentLoaded', function() {
+    // Defer slightly to allow initial renderGrid/loadGreenhouseGrid to complete
+    setTimeout(scheduleLightSensorRefresh, 200);
 });
 
 // Color temperature scheduling functions

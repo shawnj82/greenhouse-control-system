@@ -6,6 +6,8 @@ This directory contains comprehensive documentation for the Crane Creek Sensors 
 
 ### 🚀 **Getting Started**
 - **[Main README](../README.md)**: Project overview, installation, and quick start guide
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** 🆕: Production deployment with systemd services, performance optimization, and monitoring
+- **[HARDWARE_TESTING.md](HARDWARE_TESTING.md)** 🆕: Practical hardware bring-up and sensor testing guide (includes TCS34725 caveats)
 
 ### 🧠 **Deep Dive Guides**
 
@@ -57,13 +59,22 @@ Comprehensive upgrade recommendations and optimization guide
 - **Content**: Priority matrix, assessment tools, budget-conscious upgrade paths, ROI analysis
 - **Length**: Complete roadmap for system improvements with automated analysis tools
 
+#### **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** 🆕
+Production deployment guide with systemd services
+- **Audience**: System administrators, production deployments
+- **Content**: Service architecture, performance optimization, monitoring, troubleshooting
+- **Length**: Complete production deployment reference with management tools
+
 ## 🎯 **Documentation Navigation Guide**
 
 ```
 Start Here → Main README (../README.md)
+             ├─ Installing for production? → DEPLOYMENT_GUIDE.md
+             ├─ Bringing up hardware or sensors? → HARDWARE_TESTING.md
              ├─ Want to understand how AI makes decisions? → INTELLIGENT_LIGHT_DECISIONS.md
              ├─ Need to configure DLI and energy settings? → DLI_AND_CONFIGURATION_FEATURES.md
-             └─ Working on calibration system? → ADAPTIVE_CALIBRATION_SUMMARY.md
+             ├─ Working on calibration system? → ADAPTIVE_CALIBRATION_SUMMARY.md
+             └─ Setting up hardware sensors? → TCS34725_SETUP_GUIDE.md
 ```
 
 ## 🔗 **Cross-References**

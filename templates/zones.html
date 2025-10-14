@@ -25,8 +25,8 @@
             
             <div class="grid-controls">
                 <label>Grid Size: 
-                    <input type="number" id="gridRows" min="2" max="10" value="{{ zones.grid_size.rows }}"> rows ×
-                    <input type="number" id="gridCols" min="2" max="15" value="{{ zones.grid_size.cols }}"> columns
+                    <input type="number" id="gridRows" min="1" max="100" value="{{ zones.grid_size.rows }}"> rows ×
+                    <input type="number" id="gridCols" min="1" max="100" value="{{ zones.grid_size.cols }}"> columns
                 </label>
                 <button onclick="resizeGrid()" class="btn btn-primary">Resize Grid</button>
                 <button onclick="saveZones()" class="btn btn-success">Save Configuration</button>

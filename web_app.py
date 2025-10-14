@@ -1,20 +1,26 @@
-"""Flask web server for greenhouse control interface."""
-import json
-import os
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-
-# Import our sensor and control modules
+# Direct sensor imports for Flask endpoints that reference them
 from sensors.dht22 import DHT22
 from sensors.bh1750 import BH1750
 from sensors.tsl2561 import TSL2561
 from sensors.veml7700 import VEML7700
 from sensors.tsl2591 import TSL2591
-from sensors.soil_moisture import SoilMoisture
 from sensors.spectral_sensors import TCS34725Color
+"""Flask web server for greenhouse control interface."""
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+import atexit
+import atexit
+
+# Import our sensor and control modules
+from sensors.soil_moisture import SoilMoisture
 from control.relay import Relay
 from control.fan_controller import FanController
 from control.light_calibration import LightCalibrator
+from sensor_shared import DATA_DIR, _app_config, read_light_sensor
+# No internal scheduler imports; Flask reads from shared file
 
 app = Flask(__name__)
 
@@ -30,6 +36,7 @@ LIGHTS_FILE = os.path.join(DATA_DIR, "lights.json")
 LIGHT_SENSORS_FILE = os.path.join(DATA_DIR, "light_sensors.json")
 CALIBRATION_FILE = os.path.join(DATA_DIR, "light_calibration.json")
 COLOR_TEMP_PROFILES_FILE = os.path.join(DATA_DIR, "color_temperature_profiles.json")
+USER_SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 
 # Initialize hardware (with fallbacks)
 dht = DHT22(pin=4)
@@ -41,6 +48,9 @@ fan = FanController(pin=22)
 
 # Initialize light calibrator
 light_calibrator = None
+
+# Flask does not start or stop the scheduler; it's a separate service.
+
 
 def get_light_calibrator():
     """Get or create light calibrator instance."""
@@ -54,6 +64,59 @@ _light_sensor_cache = {
     "readings": {},  # { sensor_id: { lux, ts } }
     "ttl_sec": 5
 }
+
+# Cache for physical sensor instances to avoid expensive re-initialization
+_sensor_instance_cache = {}  # key: (type,bus,addr) -> instance
+
+# Configuration settings
+_app_config = {
+    "sensor_cache_ttl": 5,          # Backend cache TTL in seconds (legacy)
+    "frontend_update_interval": 10   # Frontend update interval in seconds
+}
+
+# Default user settings (units & light display)
+_user_settings_defaults = {
+    "temperature_unit": "C",  # C or F
+    "distance_unit": "in",    # in or cm
+    "light_unit": "lux"       # lux or par
+}
+
+def load_user_settings():
+    data = load_json_file(USER_SETTINGS_FILE, _user_settings_defaults.copy())
+    # Ensure missing keys are filled with defaults
+    updated = False
+    for k, v in _user_settings_defaults.items():
+        if k not in data:
+            data[k] = v
+            updated = True
+    if updated:
+        save_json_file(USER_SETTINGS_FILE, data)
+    return data
+
+def save_user_settings(data):
+    # Only allow known keys and values
+    cleaned = {
+        "temperature_unit": data.get("temperature_unit", _user_settings_defaults["temperature_unit"]).upper(),
+        "distance_unit": data.get("distance_unit", _user_settings_defaults["distance_unit"]).lower(),
+        "light_unit": data.get("light_unit", _user_settings_defaults["light_unit"]).lower()
+    }
+    if cleaned["temperature_unit"] not in ("C", "F"):
+        cleaned["temperature_unit"] = _user_settings_defaults["temperature_unit"]
+    if cleaned["distance_unit"] not in ("in", "cm"):
+        cleaned["distance_unit"] = _user_settings_defaults["distance_unit"]
+    if cleaned["light_unit"] not in ("lux", "par"):
+        cleaned["light_unit"] = _user_settings_defaults["light_unit"]
+    save_json_file(USER_SETTINGS_FILE, cleaned)
+    return cleaned
+
+
+# Background scheduler for sensor readings
+_sensor_scheduler = None  # Deprecated; Flask no longer manages internal scheduler
+
+
+
+# Ensure scheduler is started after read_light_sensor is defined
+# (place just before __main__ block)
 
 def load_json_file(filepath, default=None):
     """Load JSON file with fallback to default."""
@@ -77,13 +140,47 @@ def save_json_file(filepath, data):
 
 def get_current_status():
     """Get current sensor readings and device states."""
-    dht_data = dht.read()
+    # Read from shared sensor readings file written by scheduler service (fast)
+    light_lux = None
+    light_ppfd = None
+    readings_file = os.path.join(DATA_DIR, "sensor_readings.json")
+    if os.path.exists(readings_file):
+        try:
+            with open(readings_file, "r") as f:
+                data = json.load(f)
+                readings = data.get("readings", {})
+                if readings:
+                    # Use first available cached reading
+                    first_reading = next(iter(readings.values()), {})
+                    light_metrics = first_reading.get("light_metrics", {})
+                    light_lux = light_metrics.get("lux", {}).get("value")
+                    # Try to include PPFD if available
+                    light_ppfd = light_metrics.get("PPFD", {}).get("value")
+        except Exception as e:
+            print(f"[Dashboard] Failed to read sensor readings file: {e}")
+    
+    # For other sensors, try quick reads with timeouts, fall back to None on failure
+    dht_data = {}
+    soil_moisture = None
+    try:
+        # Quick DHT read with short timeout
+        dht_data = dht.read() or {}
+    except Exception:
+        pass  # Use None values on timeout/error
+    
+    try:
+        # Quick soil moisture read
+        soil_moisture = soil_sensor.moisture_percent()
+    except Exception:
+        pass  # Use None on timeout/error
+    
     return {
         "timestamp": datetime.now().isoformat(),
-        "temperature_c": dht_data.get("temperature_c") if isinstance(dht_data, dict) else None,
-        "humidity": dht_data.get("humidity") if isinstance(dht_data, dict) else None,
-        "light_lux": light_sensor.read_lux(),
-        "soil_moisture": soil_sensor.moisture_percent(),
+        "temperature_c": dht_data.get("temperature_c"),
+        "humidity": dht_data.get("humidity"),
+        "light_lux": light_lux,
+    "soil_moisture": soil_moisture,
+    "light_ppfd": light_ppfd,
         "devices": {
             "grow_light": "on",  # Would track actual state in real implementation
             "heater": "off",
@@ -99,11 +196,13 @@ def index():
     errors = load_json_file(ERRORS_FILE, {"errors": []})
     todos = load_json_file(TODOS_FILE, {"todos": []})
     
+    user_settings = load_user_settings()
     return render_template('index.html', 
                          status=status, 
                          zones=zones, 
                          recent_errors=errors.get("errors", [])[-5:],
-                         todos=todos.get("todos", []))
+                         todos=todos.get("todos", []),
+                         user_settings=user_settings)
 
 @app.route('/zones')
 def zones_page():
@@ -116,7 +215,8 @@ def lights_page():
     """Lights configuration page."""
     lights = load_json_file(LIGHTS_FILE, {"lights": {}})
     zones = load_json_file(ZONES_FILE, {"grid_size": {"rows": 4, "cols": 6}, "zones": {}})
-    return render_template('lights.html', lights=lights, zones=zones)
+    user_settings = load_user_settings()
+    return render_template('lights.html', lights=lights, zones=zones, user_settings=user_settings)
 
 @app.route('/intelligent-control')
 def intelligent_control_page():
@@ -158,44 +258,296 @@ def api_zones():
 
 @app.route('/api/lights', methods=['GET', 'POST'])
 def api_lights():
-    """API for lights configuration."""
+    """API for lights configuration and control."""
     if request.method == 'GET':
         lights = load_json_file(LIGHTS_FILE, {"lights": {}})
         return jsonify(lights)
     
     elif request.method == 'POST':
-        data = request.get_json()
-        if save_json_file(LIGHTS_FILE, data):
-            return jsonify({"success": True})
+        try:
+            lights_data = request.get_json()
+            
+            # Validate and enhance light configurations
+            for light_id, light_config in lights_data.get("lights", {}).items():
+                # Ensure control configuration exists
+                if "control" not in light_config:
+                    light_config["control"] = {
+                        "type": "none",
+                        "description": "No hardware control configured"
+                    }
+                
+                # Validate control configuration
+                control_type = light_config["control"].get("type", "none")
+                if control_type == "gpio":
+                    # Validate GPIO configuration
+                    if "pin" not in light_config["control"]:
+                        light_config["control"]["pin"] = None
+                        light_config["control"]["description"] = "GPIO pin not configured"
+                    # Default invert logic to False if not present
+                    if "active_low" not in light_config["control"]:
+                        light_config["control"]["active_low"] = False
+                elif control_type == "pwm":
+                    # Validate PWM configuration
+                    if "pin" not in light_config["control"]:
+                        light_config["control"]["pin"] = None
+                    if "frequency" not in light_config["control"]:
+                        light_config["control"]["frequency"] = 1000  # Default 1kHz
+                elif control_type == "rgb":
+                    # Validate RGB configuration
+                    if "pins" not in light_config["control"]:
+                        light_config["control"]["pins"] = {"red": None, "green": None, "blue": None}
+                elif control_type == "i2c":
+                    # Validate I2C configuration
+                    if "address" not in light_config["control"]:
+                        light_config["control"]["address"] = None
+                    if "bus" not in light_config["control"]:
+                        light_config["control"]["bus"] = 1
+            
+            if save_json_file(LIGHTS_FILE, lights_data):
+                return jsonify({"success": True})
+            else:
+                return jsonify({"success": False, "error": "Failed to save lights configuration"}), 500
+                
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/lights/<light_id>/control', methods=['POST'])
+def api_light_control(light_id):
+    """Control individual light based on its hardware configuration."""
+    try:
+        lights = load_json_file(LIGHTS_FILE, {"lights": {}})
+        
+        if light_id not in lights.get("lights", {}):
+            return jsonify({"success": False, "error": "Light not found"}), 404
+        
+        light_config = lights["lights"][light_id]
+        control_config = light_config.get("control", {})
+        control_type = control_config.get("type", "none")
+        
+        request_data = request.get_json()
+        action = request_data.get("action")  # "on", "off", "dim", "color"
+        value = request_data.get("value", 100)  # dimming level or color values
+        
+        result = control_light_hardware(light_id, light_config, action, value)
+        
+        if result["success"]:
+            # Update the light status in configuration
+            if action in ["on", "off"]:
+                lights["lights"][light_id]["status"] = action
+            if action == "dim" and "dimming_level" in lights["lights"][light_id]:
+                lights["lights"][light_id]["dimming_level"] = value
+            
+            save_json_file(LIGHTS_FILE, lights)
+            return jsonify(result)
         else:
-            return jsonify({"success": False, "error": "Failed to save lights"}), 500
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+def control_light_hardware(light_id, light_config, action, value=100):
+    """Control light hardware based on configuration."""
+    control_config = light_config.get("control", {})
+    control_type = control_config.get("type", "none")
+    
+    try:
+        if control_type == "none":
+            return {"success": True, "message": "No hardware control configured - status updated in software only"}
+        
+        elif control_type == "gpio":
+            # Simple GPIO on/off control
+            pin = control_config.get("pin")
+            if pin is None:
+                return {"success": False, "error": "GPIO pin not configured"}
+            
+            active_low = bool(control_config.get("active_low", False))
+            on_val = 0 if active_low else 1
+            off_val = 1 if active_low else 0
+            
+            import lgpio
+            h = lgpio.gpiochip_open(0)
+            lgpio.gpio_claim_output(h, pin)
+            
+            if action == "on":
+                lgpio.gpio_write(h, pin, on_val)
+                lgpio.gpiochip_close(h)
+                return {"success": True, "message": f"Light {light_id} turned ON via GPIO pin {pin}{' (active_low)' if active_low else ''}"}
+            elif action == "off":
+                lgpio.gpio_write(h, pin, off_val)
+                lgpio.gpiochip_close(h)
+                return {"success": True, "message": f"Light {light_id} turned OFF via GPIO pin {pin}{' (active_low)' if active_low else ''}"}
+            else:
+                lgpio.gpiochip_close(h)
+                return {"success": False, "error": "GPIO control only supports on/off actions"}
+        
+        elif control_type == "pwm":
+            # PWM dimming control
+            pin = control_config.get("pin")
+            frequency = control_config.get("frequency", 1000)
+            if pin is None:
+                return {"success": False, "error": "PWM pin not configured"}
+            
+            # Note: lgpio doesn't have built-in PWM, so we'll use simple GPIO for now
+            # For true PWM, you'd need hardware PWM or a separate PWM library
+            import lgpio
+            h = lgpio.gpiochip_open(0)
+            lgpio.gpio_claim_output(h, pin)
+            
+            if action == "on":
+                lgpio.gpio_write(h, pin, 1)
+                lgpio.gpiochip_close(h)
+                return {"success": True, "message": f"Light {light_id} turned ON via PWM pin {pin} (using GPIO)"}
+            elif action == "off":
+                lgpio.gpio_write(h, pin, 0)
+                lgpio.gpiochip_close(h)
+                return {"success": True, "message": f"Light {light_id} turned OFF via PWM pin {pin}"}
+            elif action == "dim":
+                # For dimming, we'll just turn on (future enhancement could use actual PWM)
+                lgpio.gpio_write(h, pin, 1 if value > 0 else 0)
+                lgpio.gpiochip_close(h)
+                return {"success": True, "message": f"Light {light_id} set to {'ON' if value > 0 else 'OFF'} via PWM pin {pin} (dimming not fully implemented)"}
+            else:
+                lgpio.gpiochip_close(h)
+                return {"success": False, "error": "Invalid action for PWM control"}
+        
+        elif control_type == "rgb":
+            # RGB LED control
+            pins = control_config.get("pins", {})
+            red_pin = pins.get("red")
+            green_pin = pins.get("green") 
+            blue_pin = pins.get("blue")
+            
+            if not all([red_pin, green_pin, blue_pin]):
+                return {"success": False, "error": "RGB pins not fully configured"}
+            
+            # This would implement RGB control logic
+            return {"success": True, "message": f"RGB control not yet implemented for light {light_id}"}
+        
+        elif control_type == "i2c":
+            # I2C device control
+            address = control_config.get("address")
+            bus = control_config.get("bus", 1)
+            
+            if address is None:
+                return {"success": False, "error": "I2C address not configured"}
+            
+            # This would implement I2C control logic
+            return {"success": True, "message": f"I2C control not yet implemented for light {light_id}"}
+        
+        else:
+            return {"success": False, "error": f"Unknown control type: {control_type}"}
+            
+    except Exception as e:
+        return {"success": False, "error": f"Hardware control error: {str(e)}"}
 
 @app.route('/api/light-sensors', methods=['GET', 'POST'])
 def api_light_sensors():
     """API for light sensors configuration and readings."""
+    global _sensor_scheduler
+
     if request.method == 'GET':
-        sensors = load_json_file(LIGHT_SENSORS_FILE, {"sensors": {}})
-        # Attach latest readings with caching
-        now = datetime.now().timestamp()
-        readings = {}
-        for sid, cfg in sensors.get("sensors", {}).items():
-            cached = _light_sensor_cache["readings"].get(sid)
-            if cached and (now - cached.get("ts", 0) < _light_sensor_cache["ttl_sec"]):
-                readings[sid] = {"lux": cached.get("lux")}
-            else:
-                r = read_light_sensor(cfg)
-                readings[sid] = r
-                _light_sensor_cache["readings"][sid] = {"lux": r.get("lux"), "ts": now}
-        return jsonify({"config": sensors, "readings": readings})
+        # Read from shared sensor readings file written by scheduler service
+        readings_file = os.path.join(DATA_DIR, "sensor_readings.json")
+        if os.path.exists(readings_file):
+            try:
+                with open(readings_file, "r") as f:
+                    data = json.load(f)
+                return jsonify(data)
+            except Exception as e:
+                print(f"[API] Failed to read sensor readings file: {e}")
+                return jsonify({"error": "Failed to read sensor readings file"}), 500
+        else:
+            return jsonify({"error": "Sensor readings not available"}), 503
 
     elif request.method == 'POST':
         data = request.get_json()
         if save_json_file(LIGHT_SENSORS_FILE, data):
+            # Trigger scheduler to reload config
+            scheduler = _sensor_scheduler
+            if scheduler:
+                scheduler.force_update()
             return jsonify({"success": True})
         else:
             return jsonify({"success": False, "error": "Failed to save light sensors"}), 500
 
-def read_light_sensor(cfg):
+@app.route('/api/scheduler/control', methods=['POST'])
+def api_scheduler_control():
+    """Control the background scheduler (start/stop/update interval)."""
+    global _sensor_scheduler
+    try:
+        data = request.get_json()
+        action = data.get("action")
+        
+        if action == "force_update":
+            scheduler = _sensor_scheduler
+            if scheduler:
+                scheduler.force_update()
+                return jsonify({"success": True, "message": "Forced sensor update"})
+            else:
+                return jsonify({"success": False, "error": "Scheduler not running"}), 400
+        elif action == "set_interval":
+            interval = data.get("interval", 5.0)
+            scheduler = _sensor_scheduler
+            if scheduler:
+                scheduler.set_update_interval(float(interval))
+                return jsonify({"success": True, "message": f"Update interval set to {interval}s"})
+            else:
+                return jsonify({"success": False, "error": "Scheduler not running"}), 400
+        else:
+            return jsonify({"success": False, "error": "Unknown action"}), 400
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/light-sensors/debug', methods=['GET'])
+def api_light_sensors_debug():
+    """Debug endpoint to read raw data from configured light sensors."""
+    try:
+        sensors_cfg = load_json_file(LIGHT_SENSORS_FILE, {"sensors": {}}).get("sensors", {})
+        results = {}
+        for sid, cfg in sensors_cfg.items():
+            stype = (cfg.get("type") or "").upper()
+            conn = cfg.get("connection", {})
+            bus = conn.get("bus", 1)
+            if stype == "TCS34725":
+                addr = conn.get("address", TCS34725Color.DEFAULT_ADDR)
+                cache_key = ("TCS34725", bus, addr)
+                sensor = _sensor_instance_cache.get(cache_key)
+                if sensor is None:
+                    sensor = TCS34725Color(bus=bus, addr=addr)
+                    _sensor_instance_cache[cache_key] = sensor
+                color = sensor.read_color()
+                results[sid] = {
+                    "type": stype,
+                    "raw": color,
+                    "zone_key": cfg.get("zone_key")
+                }
+            else:
+                # Fallback to basic read
+                reading = read_light_sensor(cfg, sensor_id=sid)
+                results[sid] = {
+                    "type": stype or "UNKNOWN",
+                    "reading": reading,
+                    "zone_key": cfg.get("zone_key")
+                }
+        return jsonify({"success": True, "debug": results})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/scheduler/status', methods=['GET'])
+def api_scheduler_status():
+    """Get background scheduler status and performance metrics."""
+    global _sensor_scheduler
+    scheduler = _sensor_scheduler
+    if not scheduler:
+        return jsonify({
+            "running": False,
+            "error": "Scheduler not initialized"
+        })
+    
+    return jsonify(scheduler.get_stats())
+
+def read_light_sensor(cfg, sensor_id: str = None):
     """Read a light sensor based on its configuration.
 
     cfg schema example:
@@ -231,10 +583,19 @@ def read_light_sensor(cfg):
         elif stype == "TCS34725":
             bus = cfg.get("connection", {}).get("bus", 1)
             addr = cfg.get("connection", {}).get("address", TCS34725Color.DEFAULT_ADDR)
-            sensor = TCS34725Color(bus=bus, addr=addr)
+            # Reuse TCS34725 instance to avoid repeated init and I2C setup
+            cache_key = ("TCS34725", bus, addr)
+            sensor = _sensor_instance_cache.get(cache_key)
+            if sensor is None:
+                sensor = TCS34725Color(bus=bus, addr=addr)
+                _sensor_instance_cache[cache_key] = sensor
             color_data = sensor.read_color()
             if color_data:
-                return {"lux": color_data.get("lux"), "color_temp_k": color_data.get("color_temperature_k")}
+                lux_val = color_data.get("lux")
+                if lux_val is not None and lux_val < 0:
+                    print(f"[API][WARN] TCS34725 returned negative lux {lux_val}; clamping to 0.0")
+                    lux_val = 0.0
+                return {"lux": lux_val, "color_temp_k": color_data.get("color_temperature_k")}
             return {"lux": None}
         return {"lux": None}
     except Exception as e:
@@ -899,43 +1260,7 @@ def update_time_of_use_pricing():
         }), 500
 
 @app.route('/api/config/growth-schedules', methods=['POST'])
-def update_growth_schedules():
-    """Update growth schedules configuration."""
-    try:
-        data = request.get_json()
-        
-        # Load current config
-        config_file = Path('data/light_control_config.json')
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                config = json.load(f)
-        else:
-            config = {}
-        
-        # Update growth schedules
-        config['growth_schedules'] = data
-        
-        # Save updated config
-        config_file.parent.mkdir(exist_ok=True)
-        with open(config_file, 'w') as f:
-            json.dump(config, f, indent=2)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Growth schedules updated successfully'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/color-temp-profiles')
-def api_color_temp_profiles():
-    """API for color temperature profiles."""
-    profiles = load_json_file(COLOR_TEMP_PROFILES_FILE, {"profiles": {}, "plant_type_mapping": {}})
-    return jsonify(profiles)
-
+# No internal scheduler lifecycle; managed externally by separate service.
 @app.route('/api/color-temp-schedule/<zone_id>')
 def api_get_color_temp_schedule(zone_id):
     """Get current color temperature schedule for a zone."""
@@ -1018,6 +1343,110 @@ def api_current_color_temp(zone_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', '5000'))
-    app.run(host='0.0.0.0', port=port, debug=True)
+@app.route('/api/frontend-config')
+def api_frontend_config():
+    """API endpoint for frontend configuration values."""
+    return jsonify({
+        "update_interval_ms": _app_config["frontend_update_interval"] * 1000,  # Convert to milliseconds
+        "sensor_cache_ttl": _app_config["sensor_cache_ttl"],
+        "user_settings": load_user_settings()
+    })
+
+@app.route('/configuration')
+def configuration():
+    """Configuration page for system settings."""
+    user_settings = load_user_settings()
+    return render_template('configuration.html', config=_app_config, user_settings=user_settings)
+
+@app.route('/settings')
+def settings_page():
+    """User settings page (units and light display)."""
+    user_settings = load_user_settings()
+    return render_template('settings.html', settings=user_settings)
+
+@app.route('/api/user-settings', methods=['GET', 'POST'])
+def api_user_settings():
+    """API to get/update user unit/display settings."""
+    if request.method == 'GET':
+        return jsonify(load_user_settings())
+    try:
+        data = request.get_json() or {}
+        updated = save_user_settings(data)
+        return jsonify({"success": True, "settings": updated})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/configuration', methods=['GET', 'POST'])
+def api_configuration():
+    """API for system configuration."""
+    global _app_config, _light_sensor_cache
+    
+    if request.method == 'GET':
+        return jsonify({
+            "config": _app_config,
+            "description": {
+                "sensor_cache_ttl": "Backend sensor cache TTL (seconds) - how long sensor readings are cached",
+                "frontend_update_interval": "Frontend update interval (seconds) - how often the web interface refreshes"
+            }
+        })
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            # Validate and update sensor cache TTL
+            if 'sensor_cache_ttl' in data:
+                ttl = int(data['sensor_cache_ttl'])
+                if 1 <= ttl <= 60:  # Between 1-60 seconds
+                    _app_config['sensor_cache_ttl'] = ttl
+                    # Clear cache to apply new TTL immediately
+                    _light_sensor_cache["readings"] = {}
+                else:
+                    return jsonify({"success": False, "error": "sensor_cache_ttl must be between 1-60 seconds"}), 400
+            
+            # Validate and update frontend update interval
+            if 'frontend_update_interval' in data:
+                interval = int(data['frontend_update_interval'])
+                if 1 <= interval <= 300:  # Between 1-300 seconds (5 minutes)
+                    _app_config['frontend_update_interval'] = interval
+                else:
+                    return jsonify({"success": False, "error": "frontend_update_interval must be between 1-300 seconds"}), 400
+            
+            return jsonify({"success": True, "config": _app_config})
+            
+        except (ValueError, TypeError) as e:
+            return jsonify({"success": False, "error": f"Invalid configuration values: {e}"}), 400
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Configuration update failed: {e}"}), 500
+
+## Removed: init_sensor_scheduler (Flask no longer starts a scheduler)
+
+# No internal scheduler helpers
+
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    print(f"\nReceived signal {signum}. Shutting down gracefully...")
+    exit(0)
+
+if __name__ == "__main__":
+    import signal
+    
+    # Handle shutdown signals
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Start Flask app when running this file directly
+    host = os.environ.get("FLASK_HOST", "127.0.0.1")
+    port = int(os.environ.get("FLASK_PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    print(f"Starting Greenhouse Control Web Server on http://{host}:{port} (debug={debug})")
+    
+    try:
+        # threaded=True allows concurrent requests (handy for the UI)
+        app.run(host=host, port=port, debug=debug, threaded=True)
+    except KeyboardInterrupt:
+        print("\nShutting down web server...")
+    except Exception as e:
+        print(f"Error starting web server: {e}")
+        exit(1)

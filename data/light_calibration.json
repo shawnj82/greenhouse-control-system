@@ -1,7 +1,103 @@
 {
-  "timestamp": "",
-  "baseline": {},
-  "light_effects": {},
-  "sensor_zones": {},
-  "calibration_notes": "This file stores the calibration data showing how each light affects each sensor. Run the calibration process to populate this data."
+  "timestamp": "2025-10-13T22:36:26.057877",
+  "calibration_type": "comprehensive_single_light",
+  "baseline": {
+    "ls-1760396125463": 47.578597638888894
+  },
+  "comprehensive_baseline": {
+    "basic_sensors": {
+      "ls-1760396125463": 47.578597638888894
+    },
+    "spectral_sensors": {
+      "ls-1760396125463": {
+        "type": "color",
+        "color_data": {
+          "red_raw": 2957,
+          "green_raw": 2505,
+          "blue_raw": 1565,
+          "clear_raw": 7064,
+          "color_temperature_k": 3408.0588235294117,
+          "lux": 47.686611111111105,
+          "integration_time_ms": 240,
+          "gain": 60,
+          "ppfd_approx": 0.89221633820553
+        },
+        "rgb_ratios": {
+          "red_percent": 42.080546463640246,
+          "green_percent": 35.64821403159243,
+          "blue_percent": 22.271239504767326
+        },
+        "lux": 47.686611111111105,
+        "color_temperature": 3408.0588235294117,
+        "ppfd_approx": 0.89221633820553
+      }
+    },
+    "measurement_count": 5,
+    "timestamp": "2025-10-13T22:35:06.307021",
+    "lux_stdev_percent": 0.29102577717235784
+  },
+  "light_effects": {
+    "light-1760295249804": {
+      "ls-1760396125463": 2713.0642731944445
+    }
+  },
+  "spectrum_profiles": {
+    "light-1760295249804": {
+      "spectrum_analysis": {
+        "light_id": "light-1760295249804",
+        "spectral_signature": {
+          "ls-1760396125463": {
+            "sensor_id": "ls-1760396125463",
+            "intensity_change": 2737.993409722222,
+            "lux_change": 2737.993409722222,
+            "ppfd_change": 48.50613365651725,
+            "spectral_change": null,
+            "color_shift": {
+              "red_percent": -15.606900872347598,
+              "green_percent": 3.235239557743512,
+              "blue_percent": 12.37166131460408
+            },
+            "color_temp_change": 3022.550862050639
+          }
+        },
+        "color_analysis": {},
+        "par_effectiveness": {}
+      },
+      "light_data": {
+        "basic_sensors": {
+          "ls-1760396125463": 2760.6428708333333
+        },
+        "spectral_sensors": {
+          "ls-1760396125463": {
+            "type": "color",
+            "color_data": {
+              "red_raw": 8659,
+              "green_raw": 12718,
+              "blue_raw": 11331,
+              "clear_raw": 31997,
+              "color_temperature_k": 6430.609685580051,
+              "lux": 2785.6800208333334,
+              "integration_time_ms": 240,
+              "gain": 4,
+              "ppfd_approx": 49.39834999472278
+            },
+            "rgb_ratios": {
+              "red_percent": 26.473645591292648,
+              "green_percent": 38.88345358933594,
+              "blue_percent": 34.642900819371405
+            },
+            "lux": 2785.6800208333334,
+            "color_temperature": 6430.609685580051,
+            "ppfd_approx": 49.39834999472278
+          }
+        },
+        "measurement_count": 5,
+        "timestamp": "2025-10-13T22:36:26.057826",
+        "lux_stdev_percent": 0.7781216864745956
+      }
+    }
+  },
+  "sensor_zones": {
+    "ls-1760396125463": "15-6"
+  }
 }

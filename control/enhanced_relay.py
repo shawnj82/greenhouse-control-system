@@ -12,11 +12,42 @@ from typing import Dict, List, Set, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 
+_BACKEND = 'MOCK'
+GPIO = None
+_pigpio = None
+_gpiod = None
+_lgpio = None
+
+# Try RPi.GPIO first
 try:
-    import RPi.GPIO as GPIO
-    _HAS_GPIO = True
+    import RPi.GPIO as GPIO  # type: ignore
+    _BACKEND = 'GPIO'
 except Exception:
-    _HAS_GPIO = False
+    GPIO = None
+    # Try lgpio (libgpiod v2 Python bindings)
+    try:
+        import lgpio  # type: ignore
+        _lgpio = lgpio
+        _BACKEND = 'LGPIO'
+    except Exception:
+        _lgpio = None
+    # Try pigpio
+    try:
+        import pigpio  # type: ignore
+        _pigpio = pigpio.pi()  # requires pigpio daemon running
+        if _pigpio is not None and _pigpio.connected:
+            _BACKEND = 'PIGPIO'
+        else:
+            _pigpio = None
+    except Exception:
+        _pigpio = None
+        # Try gpiod (libgpiod)
+        try:
+            import gpiod  # type: ignore
+            _gpiod = gpiod
+            _BACKEND = 'GPIOD'
+        except Exception:
+            _gpiod = None
 
 
 class SharedRelay:
@@ -28,28 +59,68 @@ class SharedRelay:
         self.active_high = active_high
         self.is_on = False
         
-        if _HAS_GPIO:
+        # Backend-specific initialization
+        if _BACKEND == 'GPIO':
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.pin, GPIO.OUT)
             self.off()
+        elif _BACKEND == 'LGPIO':
+            try:
+                self._lgpio_h = _lgpio.gpiochip_open(0)
+                _lgpio.gpio_claim_output(self._lgpio_h, self.pin)
+                self.off()
+            except Exception:
+                self._lgpio_h = None
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.set_mode(self.pin, 1)  # 1=OUTPUT
+            self.off()
+        elif _BACKEND == 'GPIOD':
+            # Request line for output; store request on instance
+            try:
+                chip = _gpiod.Chip('gpiochip0')
+                self._gpiod_line = chip.get_line(self.pin)
+                self._gpiod_line.request(consumer='greenhouse', type=_gpiod.LINE_REQ_DIR_OUT)
+                self.off()
+            except Exception:
+                self._gpiod_line = None
     
     def on(self):
         """Turn on all lights controlled by this relay."""
-        if not _HAS_GPIO:
+        if _BACKEND == 'MOCK':
             light_list = ", ".join(self.light_ids)
             print(f"[MOCK] Shared Relay {self.pin} ON (Controls: {light_list})")
-        else:
+        elif _BACKEND == 'GPIO':
             GPIO.output(self.pin, GPIO.HIGH if self.active_high else GPIO.LOW)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                val = 1 if self.active_high else 0
+                _lgpio.gpio_write(self._lgpio_h, self.pin, val)
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.write(self.pin, 1 if self.active_high else 0)
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                value = 1 if self.active_high else 0
+                self._gpiod_line.set_value(value)
         
         self.is_on = True
     
     def off(self):
         """Turn off all lights controlled by this relay."""
-        if not _HAS_GPIO:
+        if _BACKEND == 'MOCK':
             light_list = ", ".join(self.light_ids)
             print(f"[MOCK] Shared Relay {self.pin} OFF (Controls: {light_list})")
-        else:
+        elif _BACKEND == 'GPIO':
             GPIO.output(self.pin, GPIO.LOW if self.active_high else GPIO.HIGH)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                val = 0 if self.active_high else 1
+                _lgpio.gpio_write(self._lgpio_h, self.pin, val)
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.write(self.pin, 0 if self.active_high else 1)
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                value = 0 if self.active_high else 1
+                self._gpiod_line.set_value(value)
         
         self.is_on = False
     
@@ -67,8 +138,23 @@ class SharedRelay:
     
     def cleanup(self):
         """Clean up GPIO resources."""
-        if _HAS_GPIO:
+        if _BACKEND == 'GPIO':
             GPIO.cleanup(self.pin)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                try:
+                    _lgpio.gpiochip_close(self._lgpio_h)
+                except Exception:
+                    pass
+        elif _BACKEND == 'PIGPIO':
+            # pigpio cleans up on daemon stop; no per-pin cleanup needed
+            pass
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                try:
+                    self._gpiod_line.release()
+                except Exception:
+                    pass
 
 
 class IndividualRelay:
@@ -80,33 +166,85 @@ class IndividualRelay:
         self.active_high = active_high
         self.is_on = False
         
-        if _HAS_GPIO:
+        if _BACKEND == 'GPIO':
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.pin, GPIO.OUT)
             self.off()
+        elif _BACKEND == 'LGPIO':
+            try:
+                self._lgpio_h = _lgpio.gpiochip_open(0)
+                _lgpio.gpio_claim_output(self._lgpio_h, self.pin)
+                self.off()
+            except Exception:
+                self._lgpio_h = None
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.set_mode(self.pin, 1)  # OUTPUT
+            self.off()
+        elif _BACKEND == 'GPIOD':
+            try:
+                chip = _gpiod.Chip('gpiochip0')
+                self._gpiod_line = chip.get_line(self.pin)
+                self._gpiod_line.request(consumer='greenhouse', type=_gpiod.LINE_REQ_DIR_OUT)
+                self.off()
+            except Exception:
+                self._gpiod_line = None
     
     def on(self):
         """Turn on the light."""
-        if not _HAS_GPIO:
+        if _BACKEND == 'MOCK':
             print(f"[MOCK] Individual Relay {self.pin} ON (Light: {self.light_id})")
-        else:
+        elif _BACKEND == 'GPIO':
             GPIO.output(self.pin, GPIO.HIGH if self.active_high else GPIO.LOW)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                val = 1 if self.active_high else 0
+                _lgpio.gpio_write(self._lgpio_h, self.pin, val)
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.write(self.pin, 1 if self.active_high else 0)
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                value = 1 if self.active_high else 0
+                self._gpiod_line.set_value(value)
         
         self.is_on = True
     
     def off(self):
         """Turn off the light."""
-        if not _HAS_GPIO:
+        if _BACKEND == 'MOCK':
             print(f"[MOCK] Individual Relay {self.pin} OFF (Light: {self.light_id})")
-        else:
+        elif _BACKEND == 'GPIO':
             GPIO.output(self.pin, GPIO.LOW if self.active_high else GPIO.HIGH)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                val = 0 if self.active_high else 1
+                _lgpio.gpio_write(self._lgpio_h, self.pin, val)
+        elif _BACKEND == 'PIGPIO':
+            _pigpio.write(self.pin, 0 if self.active_high else 1)
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                value = 0 if self.active_high else 1
+                self._gpiod_line.set_value(value)
         
         self.is_on = False
     
     def cleanup(self):
         """Clean up GPIO resources."""
-        if _HAS_GPIO:
+        if _BACKEND == 'GPIO':
             GPIO.cleanup(self.pin)
+        elif _BACKEND == 'LGPIO':
+            if hasattr(self, '_lgpio_h') and self._lgpio_h is not None:
+                try:
+                    _lgpio.gpiochip_close(self._lgpio_h)
+                except Exception:
+                    pass
+        elif _BACKEND == 'PIGPIO':
+            pass
+        elif _BACKEND == 'GPIOD':
+            if hasattr(self, '_gpiod_line') and self._gpiod_line:
+                try:
+                    self._gpiod_line.release()
+                except Exception:
+                    pass
 
 
 class LightGroup:
@@ -193,6 +331,11 @@ class EnhancedLightController:
         self.relay_groups_config = relay_groups_config or {}
         
         self._initialize_relay_system()
+        # Inform which GPIO backend is in use to avoid confusion
+        try:
+            print(f"GPIO backend in use: {_BACKEND}")
+        except Exception:
+            pass
     
     def _initialize_relay_system(self):
         """Initialize both individual and shared relay systems."""
@@ -221,13 +364,26 @@ class EnhancedLightController:
         for light_id, light_config in self.lights_config.items():
             if light_id not in self.light_to_group:
                 # This light is not in a group, check for individual relay
+                # Support multiple config styles:
+                # 1) Top-level relay_pin / gpio_pin
+                # 2) Nested control object: { type: 'gpio', pin: <int>, active_low: <bool> }
                 relay_pin = light_config.get('relay_pin') or light_config.get('gpio_pin')
+                active_high = light_config.get('active_high', True)
+                if relay_pin is None:
+                    control_cfg = light_config.get('control') or {}
+                    if isinstance(control_cfg, dict) and control_cfg.get('type') == 'gpio':
+                        relay_pin = control_cfg.get('pin')
+                        # Map active_low -> active_high
+                        if 'active_low' in control_cfg:
+                            try:
+                                active_high = not bool(control_cfg.get('active_low'))
+                            except Exception:
+                                active_high = True
                 if relay_pin:
-                    active_high = light_config.get('active_high', True)
                     relay = IndividualRelay(relay_pin, light_id, active_high)
                     self.individual_relays[light_id] = relay
                     self.light_to_individual[light_id] = relay
-                    print(f"Created individual relay for light '{light_id}' on pin {relay_pin}")
+                    print(f"Created individual relay for light '{light_id}' on pin {relay_pin} (backend: {_BACKEND})")
     
     def turn_on_light(self, light_id: str) -> bool:
         """Turn on a specific light (handles both individual and grouped lights)."""

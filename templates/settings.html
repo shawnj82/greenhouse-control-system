@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings - Greenhouse Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .settings-section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .setting-card { border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; }
+    .setting-card h3 { margin: 0 0 8px; font-size: 16px; }
+    .toggle-group { display: flex; gap: 12px; align-items: center; }
+    .toggle-group label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .actions { text-align: right; margin-top: 16px; }
+    .btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; }
+    .btn-primary { background: #2f7cf6; color: #fff; }
+    .btn-secondary { background: #f1f3f5; color: #222; }
+    .notice { display:none; margin: 12px 0; padding: 10px; border-radius: 6px; }
+    .notice.success { display:none; background: #e6ffed; color: #0f5132; border: 1px solid #badbcc; }
+    .inline-help { color: #6c757d; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="navigation">
+      <div class="nav-brand">🌱 Greenhouse Control</div>
+      <div class="nav-links">
+        <a href="/" class="nav-link">Dashboard</a>
+        <a href="/zones" class="nav-link">Zones</a>
+        <a href="/lights" class="nav-link">Lights</a>
+        <a href="/calibration" class="nav-link">Calibration</a>
+        <a href="/configuration" class="nav-link">Configuration</a>
+        <a href="/settings" class="nav-link active">Settings</a>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="page-header">
+        <h1>Settings</h1>
+        <p>Units and default display options used across the app.</p>
+      </div>
+
+      <div id="saveNotice" class="notice"></div>
+
+      <section class="settings-section">
+        <div class="settings-grid">
+          <div class="setting-card">
+            <h3>Temperature Unit</h3>
+            <div class="toggle-group">
+              <label><input type="radio" name="temperature_unit" value="C" {{ 'checked' if settings.temperature_unit=='C' else '' }}> Celsius (°C)</label>
+              <label><input type="radio" name="temperature_unit" value="F" {{ 'checked' if settings.temperature_unit=='F' else '' }}> Fahrenheit (°F)</label>
+            </div>
+            <div class="inline-help">Affects temperature displays across the dashboard.</div>
+          </div>
+
+          <div class="setting-card">
+            <h3>Distance Unit</h3>
+            <div class="toggle-group">
+              <label><input type="radio" name="distance_unit" value="in" {{ 'checked' if settings.distance_unit=='in' else '' }}> Inches (in)</label>
+              <label><input type="radio" name="distance_unit" value="cm" {{ 'checked' if settings.distance_unit=='cm' else '' }}> Centimeters (cm)</label>
+            </div>
+            <div class="inline-help">Used in light fixture sizes and positioning where shown.</div>
+          </div>
+
+          <div class="setting-card">
+            <h3>Light Reading Unit</h3>
+            <div class="toggle-group">
+              <label><input type="radio" name="light_unit" value="lux" {{ 'checked' if settings.light_unit=='lux' else '' }}> Lux</label>
+              <label><input type="radio" name="light_unit" value="par" {{ 'checked' if settings.light_unit=='par' else '' }}> PAR (PPFD)</label>
+            </div>
+            <div class="inline-help">Controls whether light readings are displayed as Lux or PAR (µmol·m⁻²·s⁻¹).</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="window.location='/';">Cancel</button>
+          <button class="btn btn-primary" id="saveBtn">Save Settings</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    function showSave(message, ok=true){
+      const n = document.getElementById('saveNotice');
+      n.textContent = message;
+      n.className = 'notice ' + (ok ? 'success' : 'error');
+      n.style.display = 'block';
+      setTimeout(()=>{ n.style.display='none'; }, 3000);
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', function(){
+      const temperature_unit = document.querySelector('input[name="temperature_unit"]:checked').value;
+      const distance_unit = document.querySelector('input[name="distance_unit"]:checked').value;
+      const light_unit = document.querySelector('input[name="light_unit"]:checked').value;
+
+      fetch('/api/user-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temperature_unit, distance_unit, light_unit })
+      }).then(r=>r.json()).then(data=>{
+        if(data.success){
+          showSave('Settings saved. Some pages may need a refresh.');
+        }else{
+          showSave('Failed to save: ' + (data.error||'unknown'), false);
+        }
+      }).catch(err=> showSave('Network error: '+err, false));
+    });
+  </script>
+</body>
+</html>
