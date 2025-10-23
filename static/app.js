@@ -1,51 +1,139 @@
-// JavaScript for Crane Creek Greenhouse Web Interface
-
-// Global variables
-let currentZones = {};
-let selectedZoneKeys = new Set();
-let multiSelectMode = false;
-let userSettings = { temperature_unit: 'C', distance_unit: 'in', light_unit: 'lux' };
 
 // Helper: resolve grid container supporting legacy ID
 function getGridContainer() {
     return document.getElementById('greenhouse-grid') ||
            document.getElementById('greenhouse-grid-table-container');
 }
+// JavaScript for Crane Creek Greenhouse Web Interface
 
-// Helper: ensure overlays exist inside the grid container
+// Ensure overlay containers exist and return references
 function ensureOverlays(container) {
+    if (!container) container = getGridContainer();
     if (!container) return { fixturesOverlay: null, sensorsOverlay: null };
-    // Prefer overlays under the container
+
     let fixturesOverlay = container.querySelector('#lights-overlay');
     let sensorsOverlay = container.querySelector('#sensors-overlay');
-    // If overlays exist elsewhere in the DOM, move them under container
+
     if (!fixturesOverlay) {
-        const stray = document.getElementById('lights-overlay');
-        if (stray) {
-            fixturesOverlay = stray;
-        } else {
-            fixturesOverlay = document.createElement('div');
-            fixturesOverlay.id = 'lights-overlay';
-            fixturesOverlay.className = 'lights-overlay';
-        }
+        fixturesOverlay = document.createElement('div');
+        fixturesOverlay.id = 'lights-overlay';
+        fixturesOverlay.className = 'lights-overlay';
         container.appendChild(fixturesOverlay);
     }
     if (!sensorsOverlay) {
-        const stray = document.getElementById('sensors-overlay');
-        if (stray) {
-            sensorsOverlay = stray;
-        } else {
-            sensorsOverlay = document.createElement('div');
-            sensorsOverlay.id = 'sensors-overlay';
-            sensorsOverlay.className = 'sensors-overlay';
-        }
+        sensorsOverlay = document.createElement('div');
+        sensorsOverlay.id = 'sensors-overlay';
+        sensorsOverlay.className = 'sensors-overlay';
         container.appendChild(sensorsOverlay);
     }
+
     return { fixturesOverlay, sensorsOverlay };
 }
 
-// Crop presets: per crop -> stage -> spectrum and targets
-// Values are generalized best-practice ranges; tweak per environment/fixture
+async function renderLightAmountOverlay() {
+    console.log('[LightOverlay] renderLightAmountOverlay() called');
+    console.log('[LightOverlay] Current alpha setting:', luxScaleSettings.alpha);
+    const container = getGridContainer();
+    if (!container) {
+        console.warn('[LightOverlay] No grid container found');
+        return;
+    }
+
+    clearLightAmountOverlay();
+
+    // Fetch zone light metrics
+    let zoneMetrics = {};
+    try {
+        const resp = await fetch('/api/zone-light-metrics');
+        const data = await resp.json();
+        zoneMetrics = data.zones || {};
+    } catch (e) {
+        console.warn('[LightOverlay] Failed to fetch zone light metrics:', e);
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'light-amount-overlay';
+    overlay.className = 'light-amount-overlay';
+    overlay.style.gridTemplateColumns = `repeat(${gridSize.cols}, 1fr)`;
+    overlay.style.gridTemplateRows = `repeat(${gridSize.rows}, 1fr)`;
+    // Match the grid gap to align overlay cells with the underlying grid
+    const cs = window.getComputedStyle(container);
+    const gapVal = cs.gap || `${cs.rowGap || 0} ${cs.columnGap || 0}`;
+    if (gapVal) overlay.style.gap = gapVal;
+
+    const lightMode = (userSettings.light_unit || 'lux').toLowerCase();
+    let cellsWithData = 0;
+    let cellsWithoutData = 0;
+
+    for (let row = 0; row < gridSize.rows; row++) {
+        for (let col = 0; col < gridSize.cols; col++) {
+            const zoneKey = `${row}-${col}`;
+            const zone = zoneMetrics[zoneKey];
+            const cell = document.createElement('div');
+            if (!zone) {
+                cell.className = 'light-amount-cell no-data';
+                overlay.appendChild(cell);
+                cellsWithoutData++;
+                continue;
+            }
+            cellsWithData++;
+            
+            // Check if zone data is valid
+            const isValid = zone.valid !== false; // default to true if not specified
+            
+            let displayValue, colorValue, colorText, colorAlpha = luxScaleSettings.alpha;
+            
+            if (!isValid) {
+                // No valid sensor data - show "?" with minimal styling
+                displayValue = '?';
+                cell.className = 'light-amount-cell no-data';
+                cell.innerHTML = `
+                    <div class="light-amount-info">
+                        <div class="lux-value" style="color: #999; font-size: 1.2rem;">?</div>
+                    </div>
+                `;
+            } else if (lightMode === 'par' && zone.ppfd != null) {
+                displayValue = `${Math.round(zone.ppfd)} µmol`;
+                colorValue = ppfdToColor(zone.ppfd);
+                colorText = getTextColorForBackground(colorValue, colorAlpha);
+                cell.style.backgroundColor = `rgba(${colorValue.r}, ${colorValue.g}, ${colorValue.b}, ${colorAlpha})`;
+                cell.className = `light-amount-cell light-intensity-${Math.min(9, Math.floor((zone.lux || 0) / 100))}`;
+                cell.innerHTML = `
+                    <div class="light-amount-info">
+                        <div class="lux-value" style="color: ${colorText};">${displayValue}</div>
+                    </div>
+                `;
+            } else {
+                displayValue = Math.round(zone.lux);
+                // Use a default CCT if not available
+                const cct = 4500;
+                const baseRgb = cctToRgb(cct);
+                const scaledRgb = scaleRgbByLuxLog(baseRgb, zone.lux, luxScaleSettings);
+                colorValue = scaledRgb;
+                colorText = getTextColorForBackground(scaledRgb, colorAlpha);
+                cell.style.backgroundColor = `rgba(${scaledRgb.r}, ${scaledRgb.g}, ${scaledRgb.b}, ${colorAlpha})`;
+                cell.className = `light-amount-cell light-intensity-${Math.min(9, Math.floor((zone.lux || 0) / 100))}`;
+                cell.innerHTML = `
+                    <div class="light-amount-info">
+                        <div class="lux-value" style="color: ${colorText};">${displayValue}</div>
+                    </div>
+                `;
+            }
+            overlay.appendChild(cell);
+        }
+    }
+
+    console.log(`[LightOverlay] Created ${cellsWithData} cells with data, ${cellsWithoutData} without data`);
+    console.log('[LightOverlay] Overlay element:', overlay);
+    console.log('[LightOverlay] Overlay childElementCount:', overlay.childElementCount);
+
+    // Append under container; with z-index it will sit below fixtures and sensors
+    container.appendChild(overlay);
+    console.log('[LightOverlay] Overlay appended. Container now has', container.childElementCount, 'children');
+    console.log('[LightOverlay] Overlay is in DOM:', document.body.contains(overlay));
+}
+
 const cropPresets = {
     lettuce: {
         seedling: { red: 35, blue: 35, white: 30, par: 150, hours: 16 },
@@ -59,43 +147,6 @@ const cropPresets = {
     spinach: {
         seedling: { red: 35, blue: 35, white: 30, par: 150, hours: 16 },
         vegetative: { red: 45, blue: 25, white: 30, par: 200, hours: 16 }
-    },
-    kale: {
-        seedling: { red: 35, blue: 35, white: 30, par: 150, hours: 16 },
-        vegetative: { red: 50, blue: 25, white: 25, par: 250, hours: 16 }
-    },
-    tomato: {
-        seedling: { red: 35, blue: 35, white: 30, par: 200, hours: 18 },
-        vegetative: { red: 55, blue: 15, white: 30, par: 350, hours: 16 },
-        flowering: { red: 60, blue: 10, white: 30, par: 450, hours: 14 },
-        fruiting: { red: 65, blue: 10, white: 25, par: 500, hours: 14 }
-    },
-    pepper: {
-        seedling: { red: 35, blue: 35, white: 30, par: 200, hours: 18 },
-        vegetative: { red: 55, blue: 15, white: 30, par: 350, hours: 16 },
-        flowering: { red: 60, blue: 10, white: 30, par: 450, hours: 14 },
-        fruiting: { red: 65, blue: 10, white: 25, par: 500, hours: 14 }
-    },
-    cucumber: {
-        seedling: { red: 35, blue: 35, white: 30, par: 200, hours: 18 },
-        vegetative: { red: 55, blue: 15, white: 30, par: 350, hours: 16 },
-        flowering: { red: 60, blue: 10, white: 30, par: 450, hours: 14 },
-        fruiting: { red: 60, blue: 10, white: 30, par: 450, hours: 14 }
-    },
-    strawberry: {
-        vegetative: { red: 55, blue: 20, white: 25, par: 250, hours: 16 },
-        flowering: { red: 60, blue: 15, white: 25, par: 300, hours: 16 },
-        fruiting: { red: 60, blue: 15, white: 25, par: 350, hours: 16 }
-    },
-    marigold: {
-        seedling: { red: 40, blue: 30, white: 30, par: 150, hours: 16 },
-        vegetative: { red: 50, blue: 20, white: 30, par: 200, hours: 16 },
-        flowering: { red: 55, blue: 15, white: 30, par: 250, hours: 16 }
-    },
-    petunia: {
-        seedling: { red: 40, blue: 30, white: 30, par: 150, hours: 16 },
-        vegetative: { red: 50, blue: 20, white: 30, par: 200, hours: 16 },
-        flowering: { red: 55, blue: 15, white: 30, par: 250, hours: 16 }
     },
     zinnia: {
         seedling: { red: 40, blue: 30, white: 30, par: 150, hours: 16 },
@@ -113,13 +164,13 @@ let gridSize = { rows: 24, cols: 12 }; // Default will be overridden by zones.js
 // Estimation settings (UI-backed)
 let estimationSettings = {
     enabled: true,
-    power: 2,
-    maxSensors: 4,
-    maxDistance: 100
+    power: 1.5,      // Reduced from 2 to make distance falloff less aggressive
+    maxSensors: 6,   // Increased from 4 to use more sensors in estimation
+    maxDistance: 5   // Reduced from 100 to focus on nearby sensors only
 };
 // Lux scaling settings (log mapping)
 let luxScaleSettings = {
-    maxLux: 100000,
+    maxLux: 30000,  // Updated to 30k lux for white
     softFloor: 50,
     gamma: 2.0,
     alpha: 1.0
@@ -358,10 +409,19 @@ function renderLightsOverlay() {
     }
 
     // Handle light amount overlay
+    // Render initially if checked, but don't re-render on every call (let sensor refresh handle updates)
     const showAmount = document.getElementById('showLightAmount');
     if (showAmount && showAmount.checked) {
-        renderLightAmountOverlay();
-    } else {
+        const existingOverlay = document.getElementById('light-amount-overlay');
+        if (!existingOverlay) {
+            // Only render if overlay doesn't exist yet (initial load or after being cleared)
+            console.log('[LightOverlay] Initial render - checkbox is checked, overlay does not exist');
+            renderLightAmountOverlay();
+        } else {
+            console.log('[LightOverlay] Overlay already exists, skipping re-render');
+        }
+    } else if (showAmount) {
+        console.log('[LightOverlay] Clearing overlay - checkbox is unchecked');
         clearLightAmountOverlay();
     }
 
@@ -549,8 +609,9 @@ function renderSensorMarkers() {
     tt.className = 'tooltip';
     const mode = (userSettings.light_unit || 'lux').toLowerCase();
     let readingStr = '—';
-    const readingLux = currentLightSensors.readings?.[sid]?.light_metrics?.lux?.value;
-    const readingPPFD = currentLightSensors.readings?.[sid]?.light_metrics?.PPFD?.value;
+    // Try new data structure first (raw_color_data), then fall back to legacy
+    const readingLux = currentLightSensors.readings?.[sid]?.raw_color_data?.lux ?? currentLightSensors.readings?.[sid]?.light_metrics?.lux?.value;
+    const readingPPFD = currentLightSensors.readings?.[sid]?.raw_color_data?.ppfd_approx ?? currentLightSensors.readings?.[sid]?.light_metrics?.PPFD?.value;
     if (mode === 'par' && readingPPFD != null) {
         readingStr = Math.round(readingPPFD) + ' µmol';
     } else if (readingLux != null) {
@@ -563,110 +624,20 @@ function renderSensorMarkers() {
     }
 }
 
-function renderLightAmountOverlay() {
-    const container = getGridContainer();
-    if (!container) return;
-
-    clearLightAmountOverlay();
-    
-    const overlay = document.createElement('div');
-    overlay.id = 'light-amount-overlay';
-    overlay.className = 'light-amount-overlay';
-    overlay.style.gridTemplateColumns = `repeat(${gridSize.cols}, 1fr)`;
-    overlay.style.gridTemplateRows = `repeat(${gridSize.rows}, 1fr)`;
-    // Match the grid gap to align overlay cells with the underlying grid
-    const cs = window.getComputedStyle(container);
-    const gapVal = cs.gap || `${cs.rowGap || 0} ${cs.columnGap || 0}`;
-    if (gapVal) overlay.style.gap = gapVal;
-    
-    // Calculate light amount for each grid cell (sensor-only)
-    const lightMode = (userSettings.light_unit || 'lux').toLowerCase();
-    for (let row = 0; row < gridSize.rows; row++) {
-        for (let col = 0; col < gridSize.cols; col++) {
-            const lightAmount = calculateLightAmount(row, col);
-            const cell = document.createElement('div');
-            if (!lightAmount) {
-                cell.className = 'light-amount-cell no-data';
-                overlay.appendChild(cell);
-                continue;
-            }
-            cell.className = `light-amount-cell light-intensity-${lightAmount.intensity}`;
-
-            let displayValue, colorValue, colorText, colorAlpha = luxScaleSettings.alpha;
-            if (lightMode === 'par' && lightAmount.ppfd != null) {
-                // PPFD mode: color by PPFD, display PPFD value
-                displayValue = `${lightAmount.ppfd} µmol`;
-                // Color scale: blue (low) to green (mid) to yellow (high)
-                colorValue = ppfdToColor(lightAmount.ppfd);
-                colorText = getTextColorForBackground(colorValue, colorAlpha);
-                cell.style.backgroundColor = `rgba(${colorValue.r}, ${colorValue.g}, ${colorValue.b}, ${colorAlpha})`;
-            } else {
-                // Lux mode (default)
-                displayValue = lightAmount.lux;
-                const cct = Number.isFinite(lightAmount.colorTemp) ? lightAmount.colorTemp : 4500;
-                const baseRgb = cctToRgb(cct);
-                const scaledRgb = scaleRgbByLuxLog(baseRgb, lightAmount.lux, luxScaleSettings);
-                colorValue = scaledRgb;
-                colorText = getTextColorForBackground(scaledRgb, colorAlpha);
-                cell.style.backgroundColor = `rgba(${scaledRgb.r}, ${scaledRgb.g}, ${scaledRgb.b}, ${colorAlpha})`;
-            }
-
-            // Sensor vs estimated reading display
-            let displayInfo;
-            if (lightAmount.source === 'sensor') {
-                displayInfo = `
-                    <div class="sensor-reading">
-                        <div class="lux-value" style="color: ${colorText}; text-decoration: underline;">${displayValue}</div>
-                    </div>
-                `;
-            } else if (lightAmount.source === 'estimated') {
-                displayInfo = `
-                    <div class="estimated-reading">
-                        <div class="lux-value" style="color: ${colorText}"><em>${displayValue}</em></div>
-                    </div>
-                `;
-            } else {
-                displayInfo = '';
-            }
-
-            cell.innerHTML = `
-                <div class="light-amount-info">
-                    ${displayInfo}
-                </div>
-            `;
-            overlay.appendChild(cell);
-        }
-    }
-    
-    // Append under container; with z-index it will sit below fixtures and sensors
-    container.appendChild(overlay);
+// removed duplicate sensor-based renderLightAmountOverlay; async API-based version is defined above
 // --- PPFD color scale helper ---
 function ppfdToColor(ppfd) {
-    // Blue (low) → Green (mid) → Yellow (high)
-    // 0-100: blue, 100-300: green, 300-600: yellow, >600: orange
-    if (ppfd <= 100) return { r: 60, g: 120, b: 255 };
-    if (ppfd <= 300) {
-        // interpolate blue→green
-        const t = (ppfd - 100) / 200;
-        return {
-            r: Math.round(60 + t * (60)),
-            g: Math.round(120 + t * (135)),
-            b: Math.round(255 - t * (135))
-        };
-    }
-    if (ppfd <= 600) {
-        // interpolate green→yellow
-        const t = (ppfd - 300) / 300;
-        return {
-            r: Math.round(120 + t * (135)),
-            g: Math.round(255 - t * (55)),
-            b: Math.round(120 - t * (120))
-        };
-    }
-    // >600: orange
-    return { r: 255, g: 200, b: 60 };
-}
-// (Global unit toggle is in Settings; no inline PPFD toggle here anymore)
+    // Use same color temperature and log scaling as lux view
+    // Scale PPFD to match the 0-1000 range
+    const cct = 4500; // Use same neutral white as lux view
+    const baseRgb = cctToRgb(cct);
+    const scaledRgb = scaleRgbByLuxLog(baseRgb, ppfd, {
+        maxLux: 1000,  // Max PPFD value
+        softFloor: 10, // Adjusted for PPFD range
+        gamma: 2.0,    // Same gamma as lux view
+        alpha: 1.0
+    });
+    return scaledRgb;
 }
 
 function calculateLightAmount(row, col) {
@@ -739,13 +710,33 @@ function getLightContribution(light, distance) {
 }
 
 function getConfiguredSensorReading(row, col) {
-    if (!currentLightSensors || !currentLightSensors.readings) return null;
+    console.log('[getConfiguredSensorReading] Called for', row, col, '- currentLightSensors:', currentLightSensors);
+    if (!currentLightSensors || !currentLightSensors.readings) {
+        console.log('[getConfiguredSensorReading] No currentLightSensors or readings');
+        return null;
+    }
     const key = `${row}-${col}`;
+    console.log('[getConfiguredSensorReading] Looking for zone_key:', key);
+    console.log('[getConfiguredSensorReading] Available sensors:', Object.keys(currentLightSensors.config?.sensors || {}));
     
     // Find any sensor mapped to this zone_key
     for (const [sid, cfg] of Object.entries(currentLightSensors.config?.sensors || {})) {
+        console.log('[getConfiguredSensorReading] Checking sensor', sid, 'zone_key:', cfg.zone_key);
         if (cfg.zone_key === key) {
             const reading = currentLightSensors.readings[sid];
+            console.log('[getConfiguredSensorReading] Found matching sensor!', sid, 'reading:', reading);
+            // Handle new data structure: raw_color_data contains lux, ppfd_approx, color_temperature_k
+            if (reading && reading.raw_color_data?.lux != null) {
+                return {
+                    lux: reading.raw_color_data.lux,
+                    color_temp: reading.raw_color_data.color_temperature_k,
+                    ppfd: reading.raw_color_data.ppfd_approx,
+                    bands: reading.bands || null,
+                    name: cfg.name || sid,
+                    type: cfg.type
+                };
+            }
+            // Legacy fallback for old data structure
             if (reading && reading.light_metrics?.lux?.value != null) {
                 return {
                     lux: reading.light_metrics.lux.value,
@@ -786,12 +777,14 @@ function findNearbySensorReading(targetRow, targetCol, maxDistance) {
         if (distance > maxDistance || distance >= closestDistance) continue;
         
         const reading = currentLightSensors.readings[sid];
-        if (reading && reading.light_metrics?.lux?.value != null) {
+        // Try new data structure first (raw_color_data), then fall back to legacy
+        const luxVal = reading?.raw_color_data?.lux ?? reading?.light_metrics?.lux?.value;
+        if (reading && luxVal != null) {
             closestDistance = distance;
             closestSensor = {
-                lux: reading.light_metrics.lux.value,
-                color_temp: reading.light_metrics?.color_temp?.value,
-                ppfd: reading.light_metrics?.PPFD?.value,
+                lux: luxVal,
+                color_temp: reading.raw_color_data?.color_temperature_k ?? reading.light_metrics?.color_temp?.value,
+                ppfd: reading.raw_color_data?.ppfd_approx ?? reading.light_metrics?.PPFD?.value,
                 bands: reading.bands,
                 name: cfg.name || sid,
                 type: cfg.type,
@@ -820,7 +813,9 @@ function estimateLightFromSensors(targetRow, targetCol, options = {}) {
         if (isNaN(sRow) || isNaN(sCol)) continue;
 
         const reading = currentLightSensors.readings[sid];
-        const luxVal = reading?.light_metrics?.lux?.value;
+        // Try new data structure first (raw_color_data), then fall back to legacy
+        let luxVal = reading?.raw_color_data?.lux;
+        if (luxVal == null) luxVal = reading?.light_metrics?.lux?.value;
         if (luxVal == null) continue;
 
         const dist = Math.sqrt(Math.pow(targetRow - sRow, 2) + Math.pow(targetCol - sCol, 2));
@@ -830,8 +825,8 @@ function estimateLightFromSensors(targetRow, targetCol, options = {}) {
             id: sid,
             distance: dist,
             lux: luxVal,
-            ppfd: reading?.light_metrics?.PPFD?.value,
-            color_temp: reading?.light_metrics?.color_temp?.value,
+            ppfd: reading?.raw_color_data?.ppfd_approx ?? reading?.light_metrics?.PPFD?.value,
+            color_temp: reading?.raw_color_data?.color_temperature_k ?? reading?.light_metrics?.color_temp?.value,
             bands: reading?.bands
         });
     }
@@ -856,19 +851,16 @@ function estimateLightFromSensors(targetRow, targetCol, options = {}) {
     let wSum = 0;
     let luxSum = 0;
     let ppfdSum = 0;
-    let ppfdCount = 0;
     let ctSum = 0;
-    let ctCount = 0;
     let redSum = 0, blueSum = 0, greenSum = 0;
-    let bandCount = 0;
 
     for (const s of selected) {
         const d = Math.max(s.distance, 0.001); // avoid division by zero
         const w = 1 / Math.pow(d, power);
         wSum += w;
         luxSum += w * s.lux;
-        if (s.ppfd != null) { ppfdSum += w * s.ppfd; ppfdCount += w; }
-        if (s.color_temp != null) { ctSum += w * s.color_temp; ctCount += w; }
+        if (s.ppfd != null) { ppfdSum += w * s.ppfd; }
+        if (s.color_temp != null) { ctSum += w * s.color_temp; }
         if (s.bands) {
             const r = s.bands.red?.value ?? 33;
             const b = s.bands.blue?.value ?? 33;
@@ -876,20 +868,19 @@ function estimateLightFromSensors(targetRow, targetCol, options = {}) {
             redSum += w * r;
             blueSum += w * b;
             greenSum += w * g;
-            bandCount += w;
         }
     }
 
     if (wSum === 0) return null;
     const est = {
         lux: luxSum / wSum,
-        ppfd: ppfdCount ? (ppfdSum / ppfdCount) : null,
-        color_temp: ctCount ? (ctSum / ctCount) : null,
-        spectrum: bandCount ? {
-            red: redSum / bandCount,
-            blue: blueSum / bandCount,
-            green: greenSum / bandCount
-        } : { red: 33, blue: 33, green: 33 },
+        ppfd: ppfdSum > 0 ? (ppfdSum / wSum) : null,
+        color_temp: ctSum > 0 ? (ctSum / wSum) : null,
+        spectrum: {
+            red: redSum / wSum,
+            blue: blueSum / wSum,
+            green: greenSum / wSum
+        },
         sensorCount: selected.length
     };
     return est;
@@ -1862,14 +1853,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (showLightAmount) {
+        console.log('[Init] Attaching light amount toggle handler');
         showLightAmount.addEventListener('change', function() {
             console.log('Light amount toggle changed to:', this.checked);
-            renderLightsOverlay();
-            // If enabling the overlay, pull fresh sensor data for quicker updates
-            if (this.checked && typeof refreshLightSensorsOnce === 'function') {
-                refreshLightSensorsOnce();
+            if (this.checked) {
+                // Pull fresh sensor data FIRST, then render the overlay
+                console.log('[LightOverlay] Checkbox checked - fetching sensor data');
+                if (typeof refreshLightSensorsOnce === 'function') {
+                    refreshLightSensorsOnce().then(() => {
+                        console.log('[LightOverlay] Sensor data loaded - rendering overlay');
+                        renderLightAmountOverlay();
+                    });
+                } else {
+                    // Fallback if refreshLightSensorsOnce doesn't exist
+                    console.log('[LightOverlay] Rendering overlay without fresh data');
+                    renderLightAmountOverlay();
+                }
+            } else {
+                // Clear the overlay when disabled
+                console.log('[LightOverlay] Checkbox unchecked - clearing overlay');
+                clearLightAmountOverlay();
             }
         });
+    } else {
+        console.warn('[Init] showLightAmount element not found!');
     }
     if (showSensorMarkers) {
         showSensorMarkers.addEventListener('change', function() {
@@ -1924,6 +1931,38 @@ function refreshLightSensorsOnce() {
     return fetch('/api/light-sensors')
         .then(r => r.json())
         .then(data => {
+            // Check if sensor readings actually changed (compare lux values to avoid re-render on timestamp change)
+            let readingsChanged = false;
+            const oldReadings = currentLightSensors?.readings || {};
+            const newReadings = data?.readings || {};
+            
+            // Check each sensor - consider significant if lux changes by more than 1%
+            for (const sid in newReadings) {
+                const oldLux = oldReadings[sid]?.raw_color_data?.lux;
+                const newLux = newReadings[sid]?.raw_color_data?.lux;
+                
+                // If one has data and other doesn't, it's a change
+                if ((oldLux == null) !== (newLux == null)) {
+                    readingsChanged = true;
+                    break;
+                }
+                
+                // If both have data, check if change is significant (> 1% or > 10 lux)
+                if (oldLux != null && newLux != null) {
+                    const luxDiff = Math.abs(newLux - oldLux);
+                    const percentChange = oldLux > 0 ? (luxDiff / oldLux) * 100 : 100;
+                    if (luxDiff > 10 || percentChange > 1) {
+                        readingsChanged = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Also check if sensors were added/removed
+            if (Object.keys(oldReadings).length !== Object.keys(newReadings).length) {
+                readingsChanged = true;
+            }
+            
             // Update global cache
             currentLightSensors = data || { config: { sensors: {} }, readings: {} };
 
@@ -1936,8 +1975,11 @@ function refreshLightSensorsOnce() {
             if (!showSensorMarkers || showSensorMarkers.checked) {
                 renderSensorMarkers();
             }
+            
+            // Only re-render light amount overlay if readings changed significantly and overlay is visible
             const showLightAmount = document.getElementById('showLightAmount');
-            if (showLightAmount && showLightAmount.checked) {
+            if (showLightAmount && showLightAmount.checked && readingsChanged) {
+                console.log('[LightOverlay] Rendering due to significant sensor change');
                 renderLightAmountOverlay();
             }
 

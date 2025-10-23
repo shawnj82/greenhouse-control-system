@@ -412,18 +412,18 @@
             }).catch(err => console.error('Failed to load light sensors', err));
         }
 
-        function renderLightSensorsTable() {
+        function renderLightSensorsTable(forceRebuild = false) {
             const container = document.getElementById('lightSensorsTable');
             const sensors = currentLightSensors?.config?.sensors || {};
             
             // Check if table already exists and we can just update readings
             const existingTable = container.querySelector('table');
-            if (existingTable) {
+            if (existingTable && !forceRebuild) {
                 updateSensorReadings();
                 return;
             }
             
-            // Full table rebuild (only when table doesn't exist)
+            // Full table rebuild (when table doesn't exist or forceRebuild is true)
             const rows = Object.entries(sensors).map(([id, s]) => `
                 <tr data-sensor-id="${id}">
                     <td><input value="${s.name || ''}" data-field="name"/></td>
@@ -438,13 +438,23 @@
                     </td>
                     <td>
                         Bus: <input type="number" min="0" style="width:70px" value="${(s.connection&&s.connection.bus)!=null?s.connection.bus:1}" data-field="bus"/>
-                        Addr: <input type="number" min="0" max="127" style="width:70px" value="${(s.connection&&s.connection.address)!=null?s.connection.address:35}" data-field="address"/>
+                        Addr: <input type="number" min="0" max="127" style="width:70px" value="${(s.connection&&s.connection.address)!=null?s.connection.address:35}" data-field="address"/><br/>
+                        Mux Addr: <input type="number" min="0" max="127" style="width:70px" value="${(s.connection&&s.connection.mux_address)!=null?s.connection.mux_address:''}" data-field="mux_address" placeholder="Optional"/>
+                        Ch: <input type="number" min="0" max="7" style="width:50px" value="${(s.connection&&s.connection.mux_channel)!=null?s.connection.mux_channel:''}" data-field="mux_channel" placeholder="0-7"/>
                     </td>
                     <td>
                         Zone:
                         <select data-field="zone_key">
                             ${getZoneOptions(s.zone_key)}
                         </select>
+                    </td>
+                    <td>
+                        <input type="number" step="0.001" min="0" style="width:80px" value="${s.scaling_factor!=null?s.scaling_factor:1.0}" data-field="scaling_factor"/>
+                    </td>
+                    <td>
+                        <input type="number" step="0.0001" min="0" style="width:90px" 
+                            value="${(s.lux_calibration!=null)?s.lux_calibration:((s.calibration_factor!=null)?s.calibration_factor:(s.type==='TCS34725'?0.3545:1.0))}" 
+                            data-field="lux_calibration"/>
                     </td>
                     <td class="reading-cell">
                         <span>${getLuxReading(currentLightSensors.readings, id)}</span>
@@ -458,11 +468,11 @@
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Name</th><th>Type</th><th>Connection</th><th>Zone</th><th>Reading</th><th></th>
+                            <th>Name</th><th>Type</th><th>Connection</th><th>Zone</th><th>Scaling Factor</th><th>Lux Calibration</th><th>Reading</th><th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${rows || '<tr><td colspan="6">No sensors configured</td></tr>'}
+                        ${rows || '<tr><td colspan="8">No sensors configured</td></tr>'}
                     </tbody>
                 </table>
             `;
@@ -491,15 +501,17 @@
                 type: 'BH1750',
                 connection: { bus: 1, address: 35 },
                 zone_key: 'unassigned',  // Changed from '' to 'unassigned'
+                scaling_factor: 1.0,
+                lux_calibration: 1.0,
                 notes: ''
             };
-            renderLightSensorsTable();
+            renderLightSensorsTable(true);  // Force rebuild to show new sensor
         }
 
         window.deleteLightSensor = function(id) {
             if (currentLightSensors?.config?.sensors && currentLightSensors.config.sensors[id]) {
                 delete currentLightSensors.config.sensors[id];
-                renderLightSensorsTable();
+                renderLightSensorsTable(true);  // Force rebuild to remove deleted sensor
             }
         }
 
@@ -516,10 +528,27 @@
                 const bus = parseInt(get('input[data-field="bus"]').value, 10);
                 const address = parseInt(get('input[data-field="address"]').value, 10);
                 const zone_key = get('select[data-field="zone_key"]').value;
+                const scaling_factor = parseFloat(get('input[data-field="scaling_factor"]').value) || 1.0;
+                const lux_calibration = parseFloat(get('input[data-field="lux_calibration"]').value);
+                
+                // Read mux fields (optional)
+                const mux_address_str = get('input[data-field="mux_address"]').value;
+                const mux_channel_str = get('input[data-field="mux_channel"]').value;
+                
+                const connection = { bus, address };
+                if (mux_address_str !== '') {
+                    connection.mux_address = parseInt(mux_address_str, 10);
+                }
+                if (mux_channel_str !== '') {
+                    connection.mux_channel = parseInt(mux_channel_str, 10);
+                }
+                
                 sensors[id] = {
                     name, type,
-                    connection: { bus, address },
-                    zone_key
+                    connection,
+                    zone_key,
+                    scaling_factor,
+                    ...(isNaN(lux_calibration) ? {} : { lux_calibration })
                 };
             });
             const payload = { sensors };

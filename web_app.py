@@ -1,10 +1,15 @@
+# NOTE: Duplicate imports and a second Flask app instantiation previously existed
+# here, which caused early-registered routes (like /api/zone-fusion) to be lost
+# when the second app = Flask(__name__) overwrote the first. This has been
+# cleaned up so there is only one import block and one Flask app.
+
 # Direct sensor imports for Flask endpoints that reference them
 from sensors.dht22 import DHT22
 from sensors.bh1750 import BH1750
 from sensors.tsl2561 import TSL2561
 from sensors.veml7700 import VEML7700
 from sensors.tsl2591 import TSL2591
-from sensors.spectral_sensors import TCS34725Color
+from sensors.spectral_sensors import TCS34725Color, SpectralSensorReader
 """Flask web server for greenhouse control interface."""
 import json
 import os
@@ -17,9 +22,11 @@ import atexit
 # Import our sensor and control modules
 from sensors.soil_moisture import SoilMoisture
 from control.relay import Relay
+import time
 from control.fan_controller import FanController
 from control.light_calibration import LightCalibrator
 from sensor_shared import DATA_DIR, _app_config, read_light_sensor
+from control.spectral_fusion import SpectralDataFusion, estimate_midpoint_spectrum
 # No internal scheduler imports; Flask reads from shared file
 
 app = Flask(__name__)
@@ -50,6 +57,53 @@ fan = FanController(pin=22)
 light_calibrator = None
 
 # Flask does not start or stop the scheduler; it's a separate service.
+
+# --- Zone Fusion API (moved here AFTER the single app instance is created) ---
+@app.route('/api/zone-fusion', methods=['GET'])
+def api_zone_fusion():
+    """API endpoint to get per-zone fusion, lux, and PPFD values.
+    
+    Now redirects to zone_light_metrics.json since zone data has been removed
+    from sensor_readings.json to keep files smaller and better organized.
+    """
+    metrics_file = os.path.join(DATA_DIR, "zone_light_metrics.json")
+    if not os.path.exists(metrics_file):
+        return jsonify({"error": "Zone fusion data not available"}), 503
+    try:
+        with open(metrics_file, "r") as f:
+            data = json.load(f)
+        # Return in expected format with 'zone_fusion' key for compatibility
+        return jsonify({"zone_fusion": data.get("zones", {}), "timestamp": data.get("timestamp")})
+    except Exception as e:
+        return jsonify({"error": f"Failed to read zone fusion: {e}"}), 500
+
+
+@app.route('/api/zone-light-metrics', methods=['GET'])
+def api_zone_light_metrics():
+    """API endpoint to get per-zone light metrics (lux, PPFD, intensities) without spectrum bin definitions."""
+    metrics_file = os.path.join(DATA_DIR, "zone_light_metrics.json")
+    if not os.path.exists(metrics_file):
+        return jsonify({"error": "Zone light metrics not available"}), 503
+    try:
+        with open(metrics_file, "r") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": f"Failed to read zone light metrics: {e}"}), 500
+
+
+@app.route('/api/spectrum-bins', methods=['GET'])
+def api_spectrum_bins():
+    """API endpoint to get the static spectrum bin definitions."""
+    bins_file = os.path.join(DATA_DIR, "spectrum_bins.json")
+    if not os.path.exists(bins_file):
+        return jsonify({"error": "Spectrum bins not available"}), 503
+    try:
+        with open(bins_file, "r") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": f"Failed to read spectrum bins: {e}"}), 500
 
 
 def get_light_calibrator():
@@ -140,24 +194,50 @@ def save_json_file(filepath, data):
 
 def get_current_status():
     """Get current sensor readings and device states."""
-    # Read from shared sensor readings file written by scheduler service (fast)
+    # Prefer zone-level light metrics for dashboard summary (matches heatmap)
     light_lux = None
     light_ppfd = None
-    readings_file = os.path.join(DATA_DIR, "sensor_readings.json")
-    if os.path.exists(readings_file):
-        try:
-            with open(readings_file, "r") as f:
-                data = json.load(f)
-                readings = data.get("readings", {})
-                if readings:
-                    # Use first available cached reading
-                    first_reading = next(iter(readings.values()), {})
-                    light_metrics = first_reading.get("light_metrics", {})
-                    light_lux = light_metrics.get("lux", {}).get("value")
-                    # Try to include PPFD if available
-                    light_ppfd = light_metrics.get("PPFD", {}).get("value")
-        except Exception as e:
-            print(f"[Dashboard] Failed to read sensor readings file: {e}")
+    metrics_file = os.path.join(DATA_DIR, "zone_light_metrics.json")
+    try:
+        if os.path.exists(metrics_file):
+            with open(metrics_file, "r") as f:
+                z = json.load(f)
+            zones = z.get("zones", {}) or {}
+            # Average across valid zones for a stable summary
+            lux_vals = []
+            ppfd_vals = []
+            for zone in zones.values():
+                if zone is None:
+                    continue
+                if zone.get("valid", True):
+                    lx = zone.get("lux")
+                    if isinstance(lx, (int, float)):
+                        lux_vals.append(float(lx))
+                    pv = zone.get("ppfd")
+                    if isinstance(pv, (int, float)):
+                        ppfd_vals.append(float(pv))
+            if lux_vals:
+                light_lux = sum(lux_vals) / max(1, len(lux_vals))
+            if ppfd_vals:
+                light_ppfd = sum(ppfd_vals) / max(1, len(ppfd_vals))
+    except Exception as e:
+        print(f"[Dashboard] Failed to read zone light metrics: {e}")
+
+    # Legacy fallback: read first sensor's light_metrics from sensor_readings.json
+    if light_lux is None and light_ppfd is None:
+        readings_file = os.path.join(DATA_DIR, "sensor_readings.json")
+        if os.path.exists(readings_file):
+            try:
+                with open(readings_file, "r") as f:
+                    data = json.load(f)
+                    readings = data.get("readings", {})
+                    if readings:
+                        first_reading = next(iter(readings.values()), {})
+                        light_metrics = first_reading.get("light_metrics", {})
+                        light_lux = light_metrics.get("lux", {}).get("value")
+                        light_ppfd = light_metrics.get("PPFD", {}).get("value")
+            except Exception as e:
+                print(f"[Dashboard] Failed to read sensor readings file: {e}")
     
     # For other sensors, try quick reads with timeouts, fall back to None on failure
     dht_data = {}
@@ -448,10 +528,22 @@ def api_light_sensors():
     if request.method == 'GET':
         # Read from shared sensor readings file written by scheduler service
         readings_file = os.path.join(DATA_DIR, "sensor_readings.json")
+        config_file = os.path.join(DATA_DIR, "light_sensors.json")
         if os.path.exists(readings_file):
             try:
                 with open(readings_file, "r") as f:
                     data = json.load(f)
+                # Merge in config.sensors from light_sensors.json
+                if os.path.exists(config_file):
+                    try:
+                        with open(config_file, "r") as cf:
+                            config_data = json.load(cf)
+                        data["config"] = {"sensors": config_data.get("sensors", {})}
+                    except Exception as ce:
+                        print(f"[API] Failed to read light_sensors.json: {ce}")
+                        data["config"] = {"sensors": {}}
+                else:
+                    data["config"] = {"sensors": {}}
                 return jsonify(data)
             except Exception as e:
                 print(f"[API] Failed to read sensor readings file: {e}")
@@ -511,15 +603,39 @@ def api_light_sensors_debug():
             bus = conn.get("bus", 1)
             if stype == "TCS34725":
                 addr = conn.get("address", TCS34725Color.DEFAULT_ADDR)
-                cache_key = ("TCS34725", bus, addr)
+                mux_addr = conn.get("mux_address")
+                mux_ch = conn.get("mux_channel")
+                cache_key = ("TCS34725", bus, addr, mux_addr, mux_ch)
                 sensor = _sensor_instance_cache.get(cache_key)
                 if sensor is None:
-                    sensor = TCS34725Color(bus=bus, addr=addr)
+                    sensor = TCS34725Color(bus=bus, addr=addr, mux_address=mux_addr, mux_channel=mux_ch)
                     _sensor_instance_cache[cache_key] = sensor
                 color = sensor.read_color()
                 results[sid] = {
                     "type": stype,
                     "raw": color,
+                    "zone_key": cfg.get("zone_key")
+                }
+            elif stype == "AS7265X":
+                addr = conn.get("address", 0x49)  # Default AS7265X address
+                cache_key = ("AS7265X", bus, addr)
+                reader = _sensor_instance_cache.get(cache_key)
+                if reader is None:
+                    # Create SpectralSensorReader for AS7265X
+                    spectral_config = {
+                        sid: {
+                            "name": cfg.get("name", "AS7265X Sensor"),
+                            "type": "AS7265X",
+                            "connection": {"bus": bus, "address": addr}
+                        }
+                    }
+                    reader = SpectralSensorReader(spectral_config)
+                    _sensor_instance_cache[cache_key] = reader
+                spectral_results = reader.read_sensors()
+                as7265x_data = spectral_results.get(sid, {})
+                results[sid] = {
+                    "type": stype,
+                    "raw": as7265x_data.get("raw_data", {}),  # Just return raw driver data
                     "zone_key": cfg.get("zone_key")
                 }
             else:
@@ -546,6 +662,158 @@ def api_scheduler_status():
         })
     
     return jsonify(scheduler.get_stats())
+
+@app.route('/api/spectrum-fusion', methods=['POST'])
+def api_spectrum_fusion():
+    """
+    Fuse spectral data from multiple sensors to estimate spectrum at target location.
+    
+    Expected JSON payload:
+    {
+        "sensors": [
+            {
+                "sensor_id": "tcs1",
+                "position": [0, 0],  // x, y coordinates
+                "reading": {...}     // raw sensor data
+            },
+            {
+                "sensor_id": "tsl1", 
+                "position": [2, 0],
+                "reading": {...}
+            }
+        ],
+        "target_position": [1, 0]  // x, y where to estimate spectrum
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+        
+        sensors_info = data.get('sensors', [])
+        target_pos = data.get('target_position')
+        
+        if len(sensors_info) < 2:
+            return jsonify({"success": False, "error": "At least 2 sensors required for fusion"}), 400
+        
+        if not target_pos or len(target_pos) != 2:
+            return jsonify({"success": False, "error": "target_position must be [x, y] coordinates"}), 400
+        
+        # Extract sensor data and positions
+        sensors_data = []
+        positions = []
+        
+        for sensor_info in sensors_info:
+            sensor_id = sensor_info.get('sensor_id')
+            position = sensor_info.get('position')
+            reading = sensor_info.get('reading')
+            
+            if not all([sensor_id, position, reading]):
+                return jsonify({"success": False, "error": f"Missing data for sensor {sensor_id}"}), 400
+            
+            if len(position) != 2:
+                return jsonify({"success": False, "error": f"Position for {sensor_id} must be [x, y]"}), 400
+            
+            sensors_data.append(reading)
+            positions.append(tuple(position))
+        
+        # Perform spectral fusion
+        fused_result = SpectralDataFusion.fuse_sensor_spectra(
+            sensors_data, positions, tuple(target_pos)
+        )
+        
+        histogram_data = SpectralDataFusion.create_histogram_data(fused_result)
+        
+        return jsonify({
+            "success": True,
+            "fused_spectrum": fused_result,
+            "histogram": histogram_data,
+            "fusion_summary": {
+                "target_position": target_pos,
+                "source_sensors": [s.get('sensor_type', 'UNKNOWN') for s in sensors_data],
+                "spatial_weights": fused_result['spatial_weights'],
+                "quality_score": histogram_data.get('interpolation_quality', 0),
+                "method": "inverse_distance_weighted_spectral_mapping"
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/spectrum-fusion/live', methods=['POST'])
+def api_live_spectrum_fusion():
+    """
+    Perform spectrum fusion using live sensor readings.
+    
+    Expected JSON payload:
+    {
+        "sensor_ids": ["sensor1", "sensor2"],
+        "positions": [[0, 0], [2, 0]], 
+        "target_position": [1, 0]
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+        
+        sensor_ids = data.get('sensor_ids', [])
+        positions = data.get('positions', [])
+        target_pos = data.get('target_position')
+        
+        if len(sensor_ids) != len(positions):
+            return jsonify({"success": False, "error": "Number of sensor_ids must match positions"}), 400
+        
+        if len(sensor_ids) < 2:
+            return jsonify({"success": False, "error": "At least 2 sensors required"}), 400
+        
+        # Load sensor configurations
+        sensors_cfg = load_json_file(LIGHT_SENSORS_FILE, {"sensors": {}}).get("sensors", {})
+        
+        # Read live data from each sensor
+        sensors_data = []
+        actual_positions = []
+        
+        for i, sensor_id in enumerate(sensor_ids):
+            if sensor_id not in sensors_cfg:
+                return jsonify({"success": False, "error": f"Sensor {sensor_id} not configured"}), 400
+            
+            # Read current sensor data
+            sensor_cfg = sensors_cfg[sensor_id]
+            reading = read_light_sensor(sensor_cfg, sensor_id)
+            
+            if reading.get('error'):
+                return jsonify({"success": False, "error": f"Error reading {sensor_id}: {reading['error']}"}), 500
+            
+            sensors_data.append(reading)
+            actual_positions.append(tuple(positions[i]))
+        
+        # Perform fusion
+        fused_result = SpectralDataFusion.fuse_sensor_spectra(
+            sensors_data, actual_positions, tuple(target_pos)
+        )
+        
+        histogram_data = SpectralDataFusion.create_histogram_data(fused_result)
+        
+        return jsonify({
+            "success": True,
+            "fused_spectrum": fused_result,
+            "histogram": histogram_data,
+            "live_readings": {
+                sensor_id: reading for sensor_id, reading in zip(sensor_ids, sensors_data)
+            },
+            "fusion_summary": {
+                "target_position": target_pos,
+                "sensor_positions": positions,
+                "source_sensors": sensor_ids,
+                "spatial_weights": fused_result['spatial_weights'],
+                "quality_score": histogram_data.get('interpolation_quality', 0),
+                "timestamp": time.time()
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 def read_light_sensor(cfg, sensor_id: str = None):
     """Read a light sensor based on its configuration.
@@ -583,20 +851,75 @@ def read_light_sensor(cfg, sensor_id: str = None):
         elif stype == "TCS34725":
             bus = cfg.get("connection", {}).get("bus", 1)
             addr = cfg.get("connection", {}).get("address", TCS34725Color.DEFAULT_ADDR)
+            mux_addr = cfg.get("connection", {}).get("mux_address")
+            mux_ch = cfg.get("connection", {}).get("mux_channel")
             # Reuse TCS34725 instance to avoid repeated init and I2C setup
-            cache_key = ("TCS34725", bus, addr)
+            cache_key = ("TCS34725", bus, addr, mux_addr, mux_ch)
             sensor = _sensor_instance_cache.get(cache_key)
             if sensor is None:
-                sensor = TCS34725Color(bus=bus, addr=addr)
+                sensor = TCS34725Color(bus=bus, addr=addr, mux_address=mux_addr, mux_channel=mux_ch)
                 _sensor_instance_cache[cache_key] = sensor
             color_data = sensor.read_color()
             if color_data:
-                lux_val = color_data.get("lux")
-                if lux_val is not None and lux_val < 0:
-                    print(f"[API][WARN] TCS34725 returned negative lux {lux_val}; clamping to 0.0")
-                    lux_val = 0.0
-                return {"lux": lux_val, "color_temp_k": color_data.get("color_temperature_k")}
-            return {"lux": None}
+                # Clamp negative lux but return raw data
+                if color_data.get("lux") is not None and color_data["lux"] < 0:
+                    print(f"[API][WARN] TCS34725 returned negative lux {color_data['lux']}; clamping to 0.0")
+                    color_data["lux"] = 0.0
+                return {
+                    "raw_color": color_data,  # Return all raw color data
+                    "sensor_type": "TCS34725"
+                }
+            return {"raw_color": {}, "sensor_type": "TCS34725"}
+        elif stype == "AS7265X":
+            bus = cfg.get("connection", {}).get("bus", 1)
+            addr = cfg.get("connection", {}).get("address", 0x49)
+            # Reuse AS7265X SpectralSensorReader to avoid repeated init
+            cache_key = ("AS7265X", bus, addr)
+            reader = _sensor_instance_cache.get(cache_key)
+            if reader is None:
+                spectral_config = {
+                    sensor_id or "as7265x": {
+                        "name": cfg.get("name", "AS7265X Sensor"),
+                        "type": "AS7265X",
+                        "connection": {"bus": bus, "address": addr}
+                    }
+                }
+                reader = SpectralSensorReader(spectral_config)
+                _sensor_instance_cache[cache_key] = reader
+            results = reader.read_sensors()
+            if results:
+                as7265x_data = next(iter(results.values()), {})
+                raw_spectrum = as7265x_data.get("raw_data", {})
+                return {
+                    "raw_spectrum": raw_spectrum,  # Just return raw 18-channel data
+                    "sensor_type": "AS7265X"
+                }
+            return {"raw_spectrum": {}, "sensor_type": "AS7265X"}
+        elif stype == "AS7262":
+            # AS7262 6-channel visible spectral sensor
+            from sensors.as7262 import AS7262Sensor
+            bus = cfg.get("connection", {}).get("bus", 1)
+            addr = cfg.get("connection", {}).get("address", 0x49)
+            mux_addr = cfg.get("connection", {}).get("mux_address")
+            mux_ch = cfg.get("connection", {}).get("mux_channel")
+            # Cache key includes mux params for uniqueness
+            cache_key = ("AS7262", bus, addr, mux_addr, mux_ch)
+            sensor = _sensor_instance_cache.get(cache_key)
+            if sensor is None:
+                sensor = AS7262Sensor(
+                    address=addr,
+                    mux_address=mux_addr,
+                    mux_channel=mux_ch,
+                    mock_mode=False
+                )
+                _sensor_instance_cache[cache_key] = sensor
+            spectrum = sensor.read_spectrum()
+            if spectrum:
+                return {
+                    "raw_spectrum_data": spectrum,  # Contains wavelengths, intensities, raw_values
+                    "sensor_type": "AS7262"
+                }
+            return {"raw_spectrum_data": {}, "sensor_type": "AS7262"}
         return {"lux": None}
     except Exception as e:
         return {"lux": None, "error": str(e)}

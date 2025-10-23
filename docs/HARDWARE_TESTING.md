@@ -67,7 +67,47 @@ The TCS34725 is an RGB color sensor. It isn’t a dedicated lux or PAR meter, bu
 
 ### When to prefer another sensor
 - If you need accurate lux across varied spectra → BH1750, VEML7700, or TSL2591
-- If you need spectral/plant-weighted analysis → AS7341 or a dedicated PAR meter
+- If you need spectral/plant-weighted analysis → AS7341, AS7265X, or a dedicated PAR meter
+
+---
+
+## AS7265X 18-Channel Spectral Sensor
+
+The AS7265X is a comprehensive 18-channel spectral sensor providing detailed UV-VIS-NIR spectrum analysis (410nm-940nm) ideal for professional grow light optimization and plant physiological research.
+
+### Key capabilities
+- **18 discrete channels**: Full spectrum coverage from near-UV (410nm) to near-IR (940nm)
+- **PAR-weighted analysis**: Comprehensive photosynthetically active radiation calculation using detailed spectral weighting
+- **Light quality metrics**: Red:blue ratio, red:far-red ratio, blue:green ratio for plant growth optimization
+- **Light type classification**: Warm flowering, cool vegetative, balanced full-spectrum detection
+- **CCT estimation**: Correlated color temperature calculation from spectral data
+
+### Limitations
+- **High power consumption**: Uses significantly more power than simpler sensors
+- **Complex initialization**: Requires proper I2C communication and sensor configuration
+- **Cost**: More expensive than basic lux sensors
+- **No direct lux measurement**: Provides spectral data but not photopic lux values
+
+### Wiring and setup
+- **Power**: 3.3V, ensure stable power supply due to higher current draw
+- **I2C**: Standard SDA/SCL connections with pull-up resistors (default address 0x49)
+- **Integration time**: Can be configured for different sensitivity/speed trade-offs
+
+### Testing steps
+1) Verify I2C communication (address 0x49)
+2) Configure in data/light_sensors.json (type: "AS7265X")  
+3) Restart services and check /api/light-sensors debug endpoint
+4) Test with different light sources and verify:
+   - All 18 channels report sensible values
+   - PAR-weighted intensity changes with grow lights
+   - Light quality metrics respond to warm vs cool sources
+   - Red:far-red ratio changes appropriately with spectrum
+
+### Best use cases
+- **Research applications**: Detailed spectral analysis for plant physiology studies
+- **Professional growing**: Optimizing LED grow light spectra for specific crops
+- **Light quality monitoring**: Ensuring consistent spectral output from aging LED fixtures
+- **Comparative analysis**: Evaluating different grow light technologies
 
 ---
 

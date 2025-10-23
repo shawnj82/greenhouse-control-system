@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectral Fusion Histograms</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c5530;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .histogram-section {
+            margin-bottom: 40px;
+        }
+        .histogram-section h2 {
+            color: #4a7c59;
+            border-bottom: 2px solid #4a7c59;
+            padding-bottom: 10px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .description {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #4a7c59;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Spectral Fusion Histogram Analysis</h1>
+        
+        <div class="histogram-section">
+            <h2>📊 3-Sensor Comparison Analysis (UPDATED with IR Fix)</h2>
+            <img src="spectrum_fusion_3sensor_comparison.png" alt="3-Sensor Fusion Comparison">
+            <div class="description">
+                <strong>Major Improvements - This plot now shows:</strong>
+                <ul>
+                    <li><strong>Quality IMPROVEMENT:</strong> 3rd sensor now IMPROVES quality (+5.4% to +9.2%) instead of reducing it</li>
+                    <li><strong>Proper IR Confidence:</strong> IR wavelengths show 0.600 confidence (TSL2591's true capability)</li>
+                    <li><strong>Realistic Spectrum Distribution:</strong> Each wavelength bin only includes sensors that can actually measure it</li>
+                    <li><strong>Better Spatial Weighting:</strong> 3D distance modeling with 6ft lights and 3ft sensors</li>
+                </ul>
+                <p><strong>Key Insight:</strong> Excluding sensors with no capability for specific wavelengths (rather than including them as zeros) dramatically improves confidence estimates and makes adding additional sensors beneficial rather than detrimental.</p>
+            </div>
+        </div>
+
+        <div class="histogram-section">
+            <h2>📍 Sensor Layout and Coverage</h2>
+            <img src="sensor_layout_3sensor.png" alt="Sensor Layout">
+            <div class="description">
+                <strong>This plot shows:</strong>
+                <ul>
+                    <li><strong>Sensor Positions:</strong> TCS34725 (red circle), TSL2591 (blue square), BH1750 (green triangle)</li>
+                    <li><strong>Target Positions:</strong> Three test positions for fusion analysis</li>
+                    <li><strong>Coverage Areas:</strong> Dotted circles showing approximate sensor influence ranges</li>
+                    <li><strong>Triangulation:</strong> Dashed lines showing the sensor triangle for spatial interpolation</li>
+                </ul>
+                <p><strong>Key Insight:</strong> The triangular arrangement provides good spatial coverage and enables interpolation at any point within or near the sensor triangle.</p>
+            </div>
+        </div>
+
+        <div class="histogram-section">
+            <h2>📈 Current Histogram Characteristics</h2>
+            <div class="description">
+                <strong>Current Histogram Summary (LATEST with IR Fix):</strong>
+                <pre style="background-color: #f1f1f1; padding: 15px; border-radius: 5px; overflow-x: auto;">
+🎯 Target Position: (1, 1) - Center of triangle
+📈 Overall Quality: 0.511 (MAJOR IMPROVEMENT from 0.332!)
+🔬 Sensors: TCS34725 + TSL2591 + BH1750
+⚖️  Spatial Weights: [0.359, 0.359, 0.282] (3D distance modeling)
+
+🌈 Spectrum Distribution:
+  Green (500-580nm):  Highest intensity (985.7)
+  Red (650-700nm):    Good intensity (520.8)  
+  Blue (450-500nm):   Good intensity (481.2)
+  Y/Orange (580-650): Moderate (397.0)
+  Near-IR (700-950):  TSL2591 only (286.3) with HIGH confidence (0.600)
+  UV/Violet (380-450): Lower (221.8)
+
+🔍 Sensor Contributions:
+  TCS34725: 267.4% (primary RGB contribution)
+  TSL2591:   29.9% (IR and visible supplementation)
+  BH1750:    17.9% (meaningful lux-based contribution)
+
+✨ BREAKTHROUGH IMPROVEMENTS:
+  • IR confidence: 0.215 → 0.600 (realistic for TSL2591's IR capability)
+  • Overall quality: 0.332 → 0.511 (+54% improvement!)
+  • 3rd sensor effect: -0.9% → +7.4% (now IMPROVES quality!)
+  • Proper wavelength-specific sensor exclusion
+                </pre>
+                <p><strong>Key Improvements:</strong></p>
+                <ul>
+                    <li>BH1750 now contributes 15.3% of intensity (was ~0% in old system)</li>
+                    <li>Quality scores are more realistic and wavelength-specific</li>
+                    <li>Confidence is highest in green range where sensors excel</li>
+                    <li>IR range appropriately shows lower confidence</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -29,14 +29,13 @@ def main():
         update_interval=WRITE_INTERVAL,
         sensor_reader_func=read_light_sensor
     )
+    print("[SchedulerService] Scheduler started. Files are automatically written by the scheduler.")
+    print(f"[SchedulerService] - sensor_readings.json (sensor data only)")
+    print(f"[SchedulerService] - zone_light_metrics.json (per-zone light metrics)")
     try:
         while True:
-            print("[SchedulerService][DEBUG] Main loop: about to get_cached_readings()")
-            readings = scheduler.get_cached_readings()
-            print(f"[SchedulerService][DEBUG] Main loop: got readings: {readings}")
-            print(f"[SchedulerService][DEBUG] Main loop: about to write to {READINGS_FILE}")
-            write_atomic_json(READINGS_FILE, readings)
-            print(f"[SchedulerService] Wrote sensor readings to {READINGS_FILE}")
+            # Scheduler automatically writes files in background
+            # Just sleep to keep service alive
             time.sleep(WRITE_INTERVAL)
     except KeyboardInterrupt:
         print("[SchedulerService] Shutting down...")

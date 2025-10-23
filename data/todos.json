@@ -17,6 +17,13 @@
       "task": "Clean water reservoir",
       "priority": "high",
       "due_date": "2025-10-15"
+    },
+    {
+      "id": 4,
+      "task": "Fix web service mutating sensor type",
+      "priority": "high",
+      "due_date": "2025-10-30",
+      "details": "Investigate and prevent unintended edits to data/light_sensors.json where sensor 'ls-as7262-18-9' type changed from AS7262 to BH1750. Add schema validation and whitelist allowed fields for any config write path; log and reject invalid writes."
     }
   ]
 }

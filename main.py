@@ -3,17 +3,25 @@
 This is a simple loop that reads sensors and toggles outputs based on thresholds.
 It's intentionally simple so you can extend it for scheduling, PID control, or remote APIs.
 """
+import sys
+import os
 import time
+
+# Add project root to path to avoid conflicts with built-in logging module
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from sensors.dht22 import DHT22
 from sensors.bh1750 import BH1750
 from sensors.soil_moisture import SoilMoisture
 from control.relay import Relay
 from control.fan_controller import FanController
-from logging import logger as log_module
+
+# Import from local logging directory
+from logging.logger import Logger
 
 
 def main():
-    logger = log_module.Logger()
+    logger = Logger()
     dht = DHT22(pin=4)
     light = BH1750()
     soil = SoilMoisture()

@@ -5,9 +5,39 @@
       "type": "TCS34725",
       "connection": {
         "bus": 1,
-        "address": 41
+        "address": 41,
+        "mux_address": 112,
+        "mux_channel": 1
       },
-      "zone_key": "15-6"
+      "zone_key": "15-6",
+      "scaling_factor": 1,
+      "lux_calibration": 1
+    },
+    "ls-1760503562307": {
+      "name": "2591",
+      "type": "TSL2591",
+      "connection": {
+        "bus": 1,
+        "address": 41,
+        "mux_address": 112,
+        "mux_channel": 0
+      },
+      "zone_key": "15-9",
+      "scaling_factor": 1,
+      "lux_calibration": 1
+    },
+    "ls-as7262-18-9": {
+      "name": "AS7262 Spectral",
+      "type": "AS7262",
+      "connection": {
+        "bus": 1,
+        "address": 73,
+        "mux_address": 112,
+        "mux_channel": 2
+      },
+      "zone_key": "18-9",
+      "scaling_factor": 14.423,
+      "lux_calibration": 1
     }
   }
 }

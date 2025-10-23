@@ -6,15 +6,31 @@ capabilities for comprehensive light characterization during calibration.
 import time
 from typing import Dict, List, Optional, Tuple
 
-# Spectral sensor implementations
+# Spectral sensor implementations (per-sensor availability flags)
 try:
     import board
     import busio
-    import adafruit_as7341  # 11-channel spectral sensor
-    import adafruit_tcs34725  # RGB color sensor
-    _HAS_SPECTRAL = True
+    _HAS_I2C = True
 except ImportError:
-    _HAS_SPECTRAL = False
+    _HAS_I2C = False
+
+try:
+    import adafruit_as7341  # 11-channel spectral sensor
+    _HAS_AS7341 = True
+except ImportError:
+    _HAS_AS7341 = False
+
+try:
+    import adafruit_tcs34725  # RGB color sensor
+    _HAS_TCS34725 = True
+except ImportError:
+    _HAS_TCS34725 = False
+
+try:
+    import adafruit_as726x   # AS7265x/AS7262/AS7263 spectral sensors
+    _HAS_AS726X = True
+except ImportError:
+    _HAS_AS726X = False
 
 try:
     from smbus2 import SMBus
@@ -51,7 +67,7 @@ class AS7341Spectral:
     
     def _initialize(self):
         """Initialize the AS7341 sensor."""
-        if not _HAS_SPECTRAL:
+        if not (_HAS_I2C and _HAS_AS7341):
             return
         try:
             i2c = busio.I2C(board.SCL, board.SDA)
@@ -148,6 +164,222 @@ class AS7341Spectral:
         return par_total
 
 
+class AS7265xSpectral:
+    """AS7265x 18-channel spectral sensor for comprehensive spectrum analysis.
+    
+    Combines three sensors (AS72651, AS72652, AS72653) for full UV-VIS-NIR coverage:
+    - AS72651: 410, 435, 460, 485, 510, 535nm (UV-Blue-Green)
+    - AS72652: 560, 585, 645, 705, 730, 760nm (Green-Red-NIR)  
+    - AS72653: 810, 860, 900, 940nm + Clear, NIR (Extended NIR)
+    """
+    
+    DEFAULT_ADDR = 0x49
+    
+    # Channel wavelength centers (nm) - all 18 channels
+    CHANNELS = {
+        # AS72651 - UV/Violet/Blue/Green
+        'uv_410': 410,
+        'violet_435': 435,
+        'blue_460': 460,
+        'blue_485': 485,
+        'cyan_510': 510,
+        'green_535': 535,
+        # AS72652 - Green/Yellow/Orange/Red/NIR
+        'green_560': 560,
+        'yellow_585': 585,
+        'red_645': 645,
+        'red_705': 705,
+        'nir_730': 730,
+        'nir_760': 760,
+        # AS72653 - Extended NIR
+        'nir_810': 810,
+        'nir_860': 860,
+        'nir_900': 900,
+        'nir_940': 940,
+        'clear': None,   # broadband visible
+        'nir_broad': None  # broadband NIR
+    }
+    
+    def __init__(self, bus=1, addr=DEFAULT_ADDR):
+        self.bus_num = bus
+        self.addr = addr
+        self.sensor = None
+        self._initialize()
+    
+    def _initialize(self):
+        """Initialize the AS7265x sensor."""
+        if not (_HAS_I2C and _HAS_TCS34725):
+            return
+        try:
+            i2c = busio.I2C(board.SCL, board.SDA)
+            self.sensor = adafruit_as726x.AS726x_I2C(i2c, address=self.addr)
+        except Exception as e:
+            print(f"Failed to initialize AS7265x: {e}")
+            self.sensor = None
+    
+    def read_spectrum(self) -> Optional[Dict[str, float]]:
+        """Read full 18-channel spectral data."""
+        if not self.sensor:
+            return None
+        
+        try:
+            # Read all channels from the three sensors
+            readings = {}
+            
+            # AS72651 channels (410-535nm)
+            readings['uv_410'] = self.sensor.channel_410nm
+            readings['violet_435'] = self.sensor.channel_435nm
+            readings['blue_460'] = self.sensor.channel_460nm
+            readings['blue_485'] = self.sensor.channel_485nm
+            readings['cyan_510'] = self.sensor.channel_510nm
+            readings['green_535'] = self.sensor.channel_535nm
+            
+            # AS72652 channels (560-760nm)
+            readings['green_560'] = self.sensor.channel_560nm
+            readings['yellow_585'] = self.sensor.channel_585nm
+            readings['red_645'] = self.sensor.channel_645nm
+            readings['red_705'] = self.sensor.channel_705nm
+            readings['nir_730'] = self.sensor.channel_730nm
+            readings['nir_760'] = self.sensor.channel_760nm
+            
+            # AS72653 channels (810-940nm + broadband)
+            readings['nir_810'] = self.sensor.channel_810nm
+            readings['nir_860'] = self.sensor.channel_860nm
+            readings['nir_900'] = self.sensor.channel_900nm
+            readings['nir_940'] = self.sensor.channel_940nm
+            readings['clear'] = self.sensor.channel_clear
+            readings['nir_broad'] = self.sensor.channel_nir
+            
+            return readings
+            
+        except Exception as e:
+            print(f"Error reading AS7265x: {e}")
+            return None
+    
+    def calculate_color_ratios(self, spectrum: Dict[str, float]) -> Dict[str, float]:
+        """Calculate detailed color percentage ratios from 18-channel data."""
+        if not spectrum:
+            return {}
+        
+        # Group channels into detailed color categories
+        uv_channels = ['uv_410']
+        violet_channels = ['violet_435']
+        blue_channels = ['blue_460', 'blue_485']
+        cyan_channels = ['cyan_510']
+        green_channels = ['green_535', 'green_560']
+        yellow_channels = ['yellow_585']
+        red_channels = ['red_645', 'red_705']
+        nir_channels = ['nir_730', 'nir_760', 'nir_810', 'nir_860', 'nir_900', 'nir_940']
+        
+        # Calculate totals for each color group
+        totals = {}
+        for name, channels in [
+            ('uv', uv_channels), ('violet', violet_channels), ('blue', blue_channels),
+            ('cyan', cyan_channels), ('green', green_channels), ('yellow', yellow_channels),
+            ('red', red_channels), ('nir', nir_channels)
+        ]:
+            totals[f'{name}_total'] = sum(spectrum.get(ch, 0) for ch in channels)
+        
+        # Calculate visible light total (exclude NIR and UV for photosynthesis calc)
+        visible_total = sum(totals[k] for k in totals.keys() if k not in ['uv_total', 'nir_total'])
+        
+        if visible_total == 0:
+            return {f'{name}_percent': 0 for name in ['uv', 'violet', 'blue', 'cyan', 'green', 'yellow', 'red', 'nir']}
+        
+        # Calculate percentages
+        percentages = {}
+        for name in ['uv', 'violet', 'blue', 'cyan', 'green', 'yellow', 'red', 'nir']:
+            total_key = f'{name}_total'
+            if name in ['uv', 'nir']:
+                # UV and NIR as percentage of total spectrum
+                all_total = sum(totals.values())
+                percentages[f'{name}_percent'] = (totals[total_key] / all_total * 100) if all_total > 0 else 0
+            else:
+                # Visible colors as percentage of visible spectrum
+                percentages[f'{name}_percent'] = (totals[total_key] / visible_total * 100) if visible_total > 0 else 0
+        
+        return percentages
+    
+    def calculate_par_weight(self, spectrum: Dict[str, float]) -> float:
+        """Calculate detailed PAR-weighted light intensity using 18-channel data."""
+        if not spectrum:
+            return 0.0
+        
+        # Detailed PAR weighting factors based on photosynthetic action spectrum
+        par_weights = {
+            'uv_410': 0.05,      # UV-A has minimal but measurable effect
+            'violet_435': 0.15,   # Violet light, some photosynthetic response
+            'blue_460': 0.85,    # Blue peak for chlorophyll b
+            'blue_485': 0.80,    # Blue-cyan transition
+            'cyan_510': 0.75,    # Cyan, good photosynthetic efficiency
+            'green_535': 0.70,   # Green, moderate but useful
+            'green_560': 0.65,   # Green peak, lower absorption
+            'yellow_585': 0.80,  # Yellow-orange, increasing efficiency
+            'red_645': 1.00,     # Red peak for chlorophyll a
+            'red_705': 0.95,     # Deep red, excellent for photosynthesis
+            'nir_730': 0.20,     # Far-red, morphological effects
+            'nir_760': 0.15,     # Far-red, shade avoidance
+            'nir_810': 0.10,     # Near-infrared, minimal photosynthetic effect
+            'nir_860': 0.05,     # Extended NIR
+            'nir_900': 0.02,     # Extended NIR
+            'nir_940': 0.01,     # Extended NIR, mostly heat
+            'clear': 0.0,        # Don't double-count broadband
+            'nir_broad': 0.0     # Don't double-count broadband NIR
+        }
+        
+        par_total = 0
+        for channel, intensity in spectrum.items():
+            if intensity is not None:
+                weight = par_weights.get(channel, 0)
+                par_total += intensity * weight
+        
+        return par_total
+    
+    def calculate_light_quality_metrics(self, spectrum: Dict[str, float]) -> Dict[str, float]:
+        """Calculate advanced light quality metrics for plant growth."""
+        if not spectrum:
+            return {}
+        
+        # Calculate key ratios important for plant physiology
+        blue_total = sum(spectrum.get(ch, 0) for ch in ['blue_460', 'blue_485'])
+        red_total = sum(spectrum.get(ch, 0) for ch in ['red_645', 'red_705'])
+        far_red_total = sum(spectrum.get(ch, 0) for ch in ['nir_730', 'nir_760'])
+        green_total = sum(spectrum.get(ch, 0) for ch in ['green_535', 'green_560'])
+        
+        metrics = {}
+        
+        # Red:Blue ratio (important for plant morphology)
+        if blue_total > 0:
+            metrics['red_blue_ratio'] = red_total / blue_total
+        else:
+            metrics['red_blue_ratio'] = 0
+        
+        # Red:Far-Red ratio (critical for shade avoidance response)
+        if far_red_total > 0:
+            metrics['red_far_red_ratio'] = red_total / far_red_total
+        else:
+            metrics['red_far_red_ratio'] = float('inf') if red_total > 0 else 0
+        
+        # Blue:Green ratio (affects photomorphogenesis)
+        if green_total > 0:
+            metrics['blue_green_ratio'] = blue_total / green_total
+        else:
+            metrics['blue_green_ratio'] = float('inf') if blue_total > 0 else 0
+        
+        # Photosynthetic Photon Flux Density estimate
+        metrics['ppfd_estimate'] = self.calculate_par_weight(spectrum)
+        
+        # Light quality classification
+        if metrics['red_blue_ratio'] > 2.0:
+            metrics['light_type'] = 'warm_flowering'
+        elif metrics['red_blue_ratio'] < 0.5:
+            metrics['light_type'] = 'cool_vegetative'
+        else:
+            metrics['light_type'] = 'balanced_fullspectrum'
+        
+        return metrics
+
+
 class TCS34725Color:
     def approximate_ppfd(self, color_data: Dict[str, float]) -> float:
         """Advanced PPFD approximation using RGB spectral analysis and lux.
@@ -219,8 +451,15 @@ class TCS34725Color:
             
         final_conversion = base_conversion * efficiency_factor * temp_adjustment
         
-        # Clamp to reasonable bounds (0.010 to 0.025 μmol/m²/s per lux)
-        final_conversion = max(0.010, min(0.025, final_conversion))
+        # Wider bounds to accommodate varied light sources (0.008 to 0.035 μmol/m²/s per lux)
+        # Note: Typical ranges:
+        # - HPS: ~0.008-0.012
+        # - Metal Halide: ~0.012-0.015
+        # - White LED: ~0.014-0.018
+        # - Full Spectrum LED: ~0.016-0.020
+        # - Sunlight: ~0.018-0.022
+        # - Blurple LED: ~0.020-0.035
+        final_conversion = max(0.008, min(0.035, final_conversion))
         
         return lux * final_conversion
     """TCS34725 RGB color sensor for ambient light analysis.
@@ -231,9 +470,11 @@ class TCS34725Color:
     
     DEFAULT_ADDR = 0x29
     
-    def __init__(self, bus=1, addr=DEFAULT_ADDR):
+    def __init__(self, bus=1, addr=DEFAULT_ADDR, mux_address=None, mux_channel=None):
         self.bus_num = bus
         self.addr = addr
+        self.mux_address = mux_address
+        self.mux_channel = mux_channel
         self.sensor = None
         # Track last used settings for adaptive adjustment
         self._last_integration_idx = 5  # default to 240ms (index 5)
@@ -242,30 +483,92 @@ class TCS34725Color:
         self._gains = [1, 4, 16, 60]
         self._initialize()
     
+    def _verify_i2c_device(self, bus_num, addr):
+        """Verify if an I2C device responds at the given address."""
+        try:
+            from smbus2 import SMBus
+            with SMBus(bus_num) as bus:
+                bus.read_byte(addr)
+                return True
+        except Exception as e:
+            print(f"[TCS34725] Device verification failed at address 0x{addr:02x}: {e}")
+            return False
+
     def _initialize(self):
         """Initialize the TCS34725 sensor with optimal ambient light settings."""
-        if not _HAS_SPECTRAL:
+        if not (_HAS_I2C and _HAS_TCS34725):
+            print("[TCS34725] Missing dependencies: I2C=", _HAS_I2C, "TCS34725=", _HAS_TCS34725)
             return
         try:
+            print("[TCS34725] Starting initialization...")
+            print(f"[TCS34725] Bus: {self.bus_num}, Address: {self.addr}, Mux: {self.mux_address}, Channel: {self.mux_channel}")
+
+            # First verify multiplexer is present if configured
+            if self.mux_address is not None:
+                print(f"[TCS34725] Verifying multiplexer at 0x{self.mux_address:02x}")
+                if not self._verify_i2c_device(self.bus_num, self.mux_address):
+                    raise Exception(f"Multiplexer not found at address 0x{self.mux_address:02x}")
+
+            # Select mux channel if configured
+            if self.mux_address is not None and self.mux_channel is not None:
+                from sensors.pca9548a import PCA9548A
+                import time
+                print(f"[TCS34725] Setting up multiplexer at address 0x{self.mux_address:02x} channel {self.mux_channel}")
+                mux = PCA9548A(bus=self.bus_num, address=self.mux_address)
+                
+                # First clear all channels
+                mux.select_channel(0)
+                time.sleep(0.05)
+                
+                # Now select our channel
+                mux.select_channel(self.mux_channel)
+                time.sleep(0.05)  # Give the mux time to switch
+                print("[TCS34725] Multiplexer channel selected")
+                
+                # Verify sensor is accessible through mux
+                print(f"[TCS34725] Verifying sensor presence at 0x{self.addr:02x} through mux")
+                if not self._verify_i2c_device(self.bus_num, self.addr):
+                    raise Exception(f"TCS34725 not found at address 0x{self.addr:02x} after mux channel select")
+            
+            print("[TCS34725] Setting up I2C bus...")
             i2c = busio.I2C(board.SCL, board.SDA)
+            print(f"[TCS34725] Creating TCS34725 instance at address 0x{self.addr:02x}")
             self.sensor = adafruit_tcs34725.TCS34725(i2c, address=self.addr)
             
             # Configure for optimal ambient light measurement
+            print("[TCS34725] Configuring sensor parameters...")
+            # Start with lower settings to avoid saturation
+            self.sensor.integration_time = 50   # Start with shorter integration time
+            self.sensor.gain = 4               # Start with lower gain
+            time.sleep(0.1)
+            
+            # Test read to verify communication
+            print("[TCS34725] Testing sensor communication...")
+            test_r, test_g, test_b, test_c = self.sensor.color_raw
+            print(f"[TCS34725] Test read successful: r={test_r}, g={test_g}, b={test_b}, c={test_c}")
+            
+            # Now set final settings
+            print("[TCS34725] Setting final parameters...")
             self.sensor.integration_time = 240  # 240ms for better accuracy
             self.sensor.gain = 16              # Higher gain for low light sensitivity
             self.sensor.interrupt = False      # Clear any interrupt flags
             
-            print(f"TCS34725 initialized for ambient light: integration_time={self.sensor.integration_time}ms, gain={self.sensor.gain}x")
+            print(f"[TCS34725] Successfully initialized: integration_time={self.sensor.integration_time}ms, gain={self.sensor.gain}x")
             
         except Exception as e:
-            print(f"Failed to initialize TCS34725: {e}")
+            print(f"[TCS34725] Failed to initialize: {e}")
+            import traceback
+            print("[TCS34725] Stack trace:")
+            traceback.print_exc()
             self.sensor = None
     
     def read_color(self) -> Optional[Dict[str, float]]:
         """Read RGB color data with adaptive gain/integration: only step up/down if needed."""
         if not self.sensor:
+            print("[TCS34725] No sensor instance available - was initialization successful?")
             return None
         try:
+            print("[TCS34725] Starting color read...")
             import time
             max_clear = 65535
             # Target to keep under ~80% of full scale to avoid clipping and allow headroom
@@ -280,21 +583,47 @@ class TCS34725Color:
             gain_idx = self._last_gain_idx
             integration_times = self._integration_times
             gains = self._gains
+            
+            print(f"[TCS34725] Using settings: integration_time={integration_times[it_idx]}ms, gain={gains[gain_idx]}x")
+            
             # Apply current (last used) settings for this measurement
-            self.sensor.integration_time = integration_times[it_idx]
-            self.sensor.gain = gains[gain_idx]
+            try:
+                self.sensor.integration_time = integration_times[it_idx]
+                self.sensor.gain = gains[gain_idx]
+            except Exception as e:
+                print(f"[TCS34725] Error setting sensor parameters: {e}")
+                raise
+                
             time.sleep(0.15)
 
             # Read values under current settings BEFORE making any adjustments
-            r, g, b, c = self.sensor.color_raw
+            print("[TCS34725] Reading raw color values...")
+            try:
+                r, g, b, c = self.sensor.color_raw
+                print(f"[TCS34725] Raw color values read: r={r}, g={g}, b={b}, c={c}")
+            except Exception as e:
+                print(f"[TCS34725] Error reading raw color values: {e}")
+                raise
+                
             # Also compute lux and color temperature using current settings
-            color_temp = self.sensor.color_temperature
-            lux = self.sensor.lux
-            # Guard against negative lux from DN40 calc under certain spectra
-            if lux is not None and lux < 0:
+            print("[TCS34725] Reading lux and color temperature...")
+            try:
+                color_temp = self.sensor.color_temperature
+                lux = self.sensor.lux
+                print(f"[TCS34725] Lux and color temp read: lux={lux}, color_temp={color_temp}")
+            except Exception as e:
+                print(f"[TCS34725] Error reading lux/color temp: {e}")
+                raise
+                
+            # Defensive handling: DN40 returns None when saturated or invalid
+            if lux is None:
+                # Treat as saturation/invalid; report 0.0 lux to downstream
+                print("[TCS34725][WARN] Lux is None (likely saturation); setting lux to 0.0")
+                lux = 0.0
+            elif lux < 0:
                 print(f"[TCS34725][WARN] Negative lux computed ({lux}); clamping to 0.0")
                 lux = 0.0
-            print(f"[TCS34725] RAW: r={r}, g={g}, b={b}, c={c}, lux={lux}, color_temp={color_temp}")
+            print(f"[TCS34725] Final values: r={r}, g={g}, b={b}, c={c}, lux={lux}, color_temp={color_temp}")
 
             # Decide adjustments for NEXT measurement
             adjusted = False
@@ -410,11 +739,21 @@ class SpectralSensorReader:
                         'config': config,
                         'type': 'spectral'
                     }
+                elif sensor_type == 'AS7265X':
+                    bus = connection.get('bus', 1)
+                    addr = connection.get('address', AS7265xSpectral.DEFAULT_ADDR)
+                    self.spectral_sensors[sensor_id] = {
+                        'instance': AS7265xSpectral(bus=bus, addr=addr),
+                        'config': config,
+                        'type': 'spectral_18ch'
+                    }
                 elif sensor_type == 'TCS34725':
                     bus = connection.get('bus', 1) 
                     addr = connection.get('address', TCS34725Color.DEFAULT_ADDR)
+                    mux_addr = connection.get('mux_address')
+                    mux_ch = connection.get('mux_channel')
                     self.spectral_sensors[sensor_id] = {
-                        'instance': TCS34725Color(bus=bus, addr=addr),
+                        'instance': TCS34725Color(bus=bus, addr=addr, mux_address=mux_addr, mux_channel=mux_ch),
                         'config': config,
                         'type': 'color'
                     }
@@ -428,6 +767,63 @@ class SpectralSensorReader:
             except Exception as e:
                 print(f"Failed to initialize sensor {sensor_id}: {e}")
     
+    def read_sensors(self) -> Dict[str, Dict]:
+        """Read raw data directly from sensors without processing."""
+        results = {}
+        
+        # Read spectral sensors - return raw driver data
+        for sensor_id, sensor_data in self.spectral_sensors.items():
+            sensor = sensor_data['instance']
+            sensor_type = sensor_data['type']
+            
+            try:
+                if sensor_type == 'spectral' and isinstance(sensor, AS7341Spectral):
+                    # Return raw spectrum from AS7341 driver
+                    spectrum = sensor.read_spectrum()
+                    if spectrum:
+                        results[sensor_id] = {
+                            'type': 'spectral',
+                            'raw_data': spectrum  # Just the raw spectrum data
+                        }
+                
+                elif sensor_type == 'spectral_18ch' and isinstance(sensor, AS7265xSpectral):
+                    # Return raw spectrum from AS7265X driver
+                    spectrum = sensor.read_spectrum()
+                    if spectrum:
+                        results[sensor_id] = {
+                            'type': 'spectral_18ch',
+                            'raw_data': spectrum  # Just the raw 18-channel data
+                        }
+                
+                elif sensor_type == 'color' and isinstance(sensor, TCS34725Color):
+                    # Return raw color data from TCS34725 driver
+                    color_data = sensor.read_color()
+                    if color_data:
+                        results[sensor_id] = {
+                            'type': 'color',
+                            'raw_data': color_data  # Just the raw color data
+                        }
+                        
+            except Exception as e:
+                print(f"Error reading spectral sensor {sensor_id}: {e}")
+                results[sensor_id] = {'type': 'error', 'error': str(e)}
+        
+        # Read basic sensors
+        for sensor_id, sensor_data in self.basic_sensors.items():
+            try:
+                sensor = sensor_data['instance']
+                if hasattr(sensor, 'read_lux'):
+                    lux = sensor.read_lux()
+                    results[sensor_id] = {
+                        'type': 'basic',
+                        'raw_data': {'lux': lux}  # Basic sensor just returns lux
+                    }
+            except Exception as e:
+                print(f"Error reading basic sensor {sensor_id}: {e}")
+                results[sensor_id] = {'type': 'error', 'error': str(e)}
+        
+        return results
+
     def read_comprehensive_data(self) -> Dict[str, Dict]:
         """Read both intensity and spectral data from all sensors."""
         results = {}
@@ -449,6 +845,22 @@ class SpectralSensorReader:
                             'spectrum': spectrum,
                             'color_ratios': color_ratios,
                             'par_weighted_intensity': par_weight,
+                            'total_intensity': spectrum.get('clear', 0)
+                        }
+                
+                elif sensor_type == 'spectral_18ch' and isinstance(sensor, AS7265xSpectral):
+                    spectrum = sensor.read_spectrum()
+                    if spectrum:
+                        color_ratios = sensor.calculate_color_ratios(spectrum)
+                        par_weight = sensor.calculate_par_weight(spectrum)
+                        light_quality = sensor.calculate_light_quality_metrics(spectrum)
+                        
+                        results[sensor_id] = {
+                            'type': 'spectral_18ch',
+                            'spectrum': spectrum,
+                            'color_ratios': color_ratios,
+                            'par_weighted_intensity': par_weight,
+                            'light_quality_metrics': light_quality,
                             'total_intensity': spectrum.get('clear', 0)
                         }
                 
@@ -587,6 +999,10 @@ class SpectralSensorReader:
 class MockAS7341:
     """Mock AS7341 for testing without hardware."""
     
+    def __init__(self, bus=None, addr=None, **kwargs):
+        """Initialize mock sensor (ignores hardware parameters)."""
+        pass
+    
     def read_spectrum(self):
         import random
         return {
@@ -620,9 +1036,23 @@ class MockAS7341:
     
     def calculate_par_weight(self, spectrum):
         return sum(spectrum.values()) * 0.7  # Mock PAR calculation
+    
+    def read_color(self):
+        """Mock read_color for TCS34725 compatibility."""
+        import random
+        return {
+            'r': random.randint(50, 255),
+            'g': random.randint(50, 255),
+            'b': random.randint(50, 255),
+            'c': random.randint(200, 1000),
+            'lux': random.uniform(100, 1000),
+            'color_temp': random.uniform(3000, 6500)
+        }
 
 
-# Use mock if hardware not available
-if not _HAS_SPECTRAL:
+# Use mocks if specific hardware modules are unavailable
+if not _HAS_AS7341:
     AS7341Spectral = MockAS7341
+if not _HAS_TCS34725:
+    # Reuse MockAS7341 for TCS34725 compatibility (implements read_color)
     TCS34725Color = MockAS7341

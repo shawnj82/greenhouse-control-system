@@ -73,16 +73,18 @@ class SensorReader:
                     from sensors.spectral_sensors import TCS34725Color
                     bus = connection.get('bus', 1)
                     addr = connection.get('address', 0x29)
+                    mux_addr = connection.get('mux_address')
+                    mux_ch = connection.get('mux_channel')
                     class TCS34725LuxWrapper:
-                        def __init__(self, bus, addr):
-                            self._sensor = TCS34725Color(bus=bus, addr=addr)
+                        def __init__(self, bus, addr, mux_address=None, mux_channel=None):
+                            self._sensor = TCS34725Color(bus=bus, addr=addr, mux_address=mux_address, mux_channel=mux_channel)
                         def read_lux(self):
                             color = self._sensor.read_color()
                             if color and 'lux' in color:
                                 return color['lux']
                             return None
                     self.sensors[sensor_id] = {
-                        'instance': TCS34725LuxWrapper(bus=bus, addr=addr),
+                        'instance': TCS34725LuxWrapper(bus=bus, addr=addr, mux_address=mux_addr, mux_channel=mux_ch),
                         'config': config
                     }
             except Exception as e:

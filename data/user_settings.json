@@ -1,5 +1,5 @@
 {
   "temperature_unit": "F",
   "distance_unit": "in",
-  "light_unit": "par"
+  "light_unit": "lux"
 }

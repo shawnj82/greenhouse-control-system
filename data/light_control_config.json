@@ -90,4 +90,8 @@
       "description": "Flowering stage requiring intense light"
     }
   }
+  ,
+  "ppfd_calculation": {
+    "method": "photon_weighted" 
+  }
 }

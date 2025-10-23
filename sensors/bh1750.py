@@ -14,11 +14,24 @@ except Exception:
 class BH1750:
     DEFAULT_ADDR = 0x23
 
-    def __init__(self, bus=1, addr=DEFAULT_ADDR):
+    def __init__(self, bus=1, addr=DEFAULT_ADDR, mux_address=None, mux_channel=None):
         self.bus_num = bus
         self.addr = addr
+        self.mux_address = mux_address
+        self.mux_channel = mux_channel
+
+    def _select_mux(self):
+        if self.mux_address is not None and self.mux_channel is not None:
+            try:
+                from sensors.pca9548a import PCA9548A
+                mux = PCA9548A(bus=self.bus_num, address=self.mux_address)
+                mux.select_channel(self.mux_channel)
+                time.sleep(0.05)
+            except Exception as e:
+                print(f"[BH1750] Failed to select mux channel {self.mux_channel} at 0x{self.mux_address:02x}: {e}")
 
     def read_lux(self):
+        self._select_mux()
         if not _HAS_SMBUS:
             return None
         try:
