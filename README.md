@@ -4,6 +4,17 @@
 
 Crane Creek Sensors is an advanced, AI-driven greenhouse monitoring and control system with intelligent light management. It provides real-time data collection, automated device control, Daily Light Integral (DLI) tracking, and sophisticated decision-making algorithms for optimal plant growth while minimizing energy costs.
 
+**🆕 Recent Spectral Mapping & Calibration Enhancements:**
+- **AS7262 Spectral Sensor:** Now uses Gaussian mapping (FWHM 40nm) for each channel, providing more realistic spectral spread and energy-preserving integration.
+- **TCS34725 Sensor:** Uses normalized RGB+clear mapping, with raw counts normalized by gain and integration time for consistent, comparable measurements. Each channel is mapped to wavelength bins with proper overlap.
+- **TSL2591 Sensor:** Broadband sensor with visible/IR split, mapped to appropriate bins for spectral fusion.
+- **Energy-Preserving Rescale:** All sensor mappings are rescaled to preserve total energy, ensuring accurate fusion and comparison across sensor types.
+- **Calibration Factor Validation:** Calibration factors (e.g., scaling_factor, lux_calibration) are validated and can be set per sensor for precise adjustment.
+- **Histogram Plotting:** New scripts generate graphical and numerical histograms for each sensor and the combined fusion, aiding in analysis and debugging.
+- **Improved Code Hygiene:** Spectral fusion logic has been refactored for clarity, maintainability, and correctness. Indentation and stray print statements have been fixed.
+
+See [docs/NORMALIZED_SPECTRAL_CALCULATIONS.md](docs/NORMALIZED_SPECTRAL_CALCULATIONS.md) and [docs/INTELLIGENT_LIGHT_DECISIONS.md](docs/INTELLIGENT_LIGHT_DECISIONS.md) for technical details.
+
 **🆕 Advanced Features:**
 - **Intelligent Light Control**: AI-powered decision engine with 8-factor analysis
 - **Daily Light Integral (DLI) Tracking**: Precise daily light exposure monitoring per crop
@@ -13,7 +24,7 @@ Crane Creek Sensors is an advanced, AI-driven greenhouse monitoring and control 
 - **Zone-Specific Management**: Individual DLI targets and timing per growing zone
 
 **Core Capabilities:**
-- Modular sensor support: temperature, humidity, soil moisture, and advanced light sensors (BH1750, TSL2561, VEML7700, TSL2591, AS7341, TCS34725)
+- Modular sensor support: temperature, humidity, soil moisture, and advanced light sensors (BH1750, TSL2561, VEML7700, TSL2591, AS7341, AS7265X, TCS34725)
 - Intelligent device control: relays, PWM fans with energy-aware automation
 - Advanced web dashboard: intelligent control, DLI monitoring, spectrum analysis, configuration management
 - Comprehensive REST API for integration with other systems
@@ -60,7 +71,7 @@ crane-creek-sensors/
 │   ├── tsl2561.py              # Light sensor with IR
 │   ├── tsl2591.py              # Advanced light sensor with spectrum
 │   ├── veml7700.py             # High accuracy light sensor
-│   └── spectral_sensors.py     # Advanced spectrum sensors (AS7341, TCS34725)
+│   └── spectral_sensors.py     # Advanced spectrum sensors (AS7341, AS7265X, TCS34725)
 ├── control/                     # Device controllers & intelligent systems
 │   ├── relay.py                # Relay control
 │   ├── fan_controller.py       # PWM fan control
@@ -138,7 +149,7 @@ crane-creek-sensors/
 - **Energy Cost Tracking**: Real-time cost analysis and optimization recommendations
 
 ### 🔬 **Advanced Sensor Support**
-- **Multi-Sensor Calibration**: BH1750, TSL2561, VEML7700, TSL2591, AS7341, TCS34725
+- **Multi-Sensor Calibration**: BH1750, TSL2561, VEML7700, TSL2591, AS7341, AS7265X, TCS34725
 - **Spectral Analysis**: Color temperature and spectrum measurement for optimal plant lighting
 - **Mixed Capability Optimization**: Works with any combination of basic and advanced sensors
 - **Ambient Light Intelligence**: Automatically adjusts for natural light conditions
@@ -818,7 +829,7 @@ PWM Fan Control:
 - **Development-Friendly**: Includes comprehensive mock implementations for development without RPi hardware
 - **Sensor Requirements**: 
   - Soil moisture requires an ADC (MCP3008, ADS1115, etc.) - customize `soil_moisture.py`
-  - Advanced light sensors (TSL2591, AS7341) provide spectrum analysis capabilities
+  - Advanced light sensors (TSL2591, AS7341, AS7265X) provide spectrum analysis capabilities
   - Basic sensors (BH1750, TSL2561) work with intelligent adaptation
 - **Graceful Fallbacks**: All GPIO libraries are optional and fall back gracefully
 - **Power Management**: System tracks power consumption and optimizes for energy efficiency

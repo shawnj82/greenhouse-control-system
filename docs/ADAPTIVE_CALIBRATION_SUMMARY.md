@@ -1,7 +1,13 @@
 # Adaptive Light Calibration System - Implementation Summary
 
 ## Overview
+
 The adaptive light calibration system has been successfully implemented to handle your "seemingly random array of different kinds of lights" and mixed sensor capabilities. The system intelligently adapts to each zone's hardware configuration and provides optimal lighting solutions.
+
+**🆕 Recent Enhancements:**
+- **Improved Spectral Fusion Logic:** Sensor data is now fused using energy-preserving rescale, with AS7262 channels mapped using Gaussian curves (FWHM 40nm) and other sensors mapped to wavelength bins with proper normalization.
+- **Calibration Factor Validation:** Calibration factors are checked and can be set per sensor, ensuring correct scaling and lux calibration for each device.
+- **Histogram Analysis:** Graphical and numerical histograms are generated for each sensor and the combined fusion, aiding in calibration and debugging.
 
 ## Key Features Implemented
 

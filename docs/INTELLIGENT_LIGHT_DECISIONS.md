@@ -2,9 +2,19 @@
 
 ## Overview
 
-The intelligent light decision-making system answers the question: **"How is the decision on whether to turn a light on going to be made?"** 
+The intelligent light decision-making system answers the question: **"How is the decision on whether to turn a light on going to be made?"**
 
 This system makes automated, intelligent decisions about greenhouse lighting based on multiple factors, creating an adaptive control system that "comes as close as we can with the data and capabilities at hand."
+
+**🆕 Sensor Mapping & Calibration Enhancements:**
+- **AS7262 Spectral Sensor:** Uses Gaussian mapping (FWHM 40nm) for each channel, providing realistic spectral spread and energy preservation.
+- **TCS34725 Sensor:** Employs normalized RGB+clear mapping, with raw counts normalized by gain and integration time, then mapped to wavelength bins with proper overlap.
+- **TSL2591 Sensor:** Broadband sensor mapped to visible and IR bins for fusion.
+- **Energy-Preserving Fusion:** All sensor data is rescaled to preserve total energy, ensuring accurate fusion and comparison.
+- **Calibration Factor Validation:** Calibration factors are validated and can be set per sensor for precise adjustment.
+- **Histogram Analysis:** Graphical and numerical histograms are generated for each sensor and the combined fusion, aiding in decision transparency and debugging.
+
+The decision engine now uses this improved spectral fusion logic for all light decisions, resulting in more accurate, reliable, and explainable outcomes.
 
 **🆕 NEW FEATURES:** The system now includes Daily Light Integral (DLI) tracking, configurable time-of-use pricing, and zone-specific morning turn-on times for even more precise control.
 

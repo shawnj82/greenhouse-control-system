@@ -4,6 +4,13 @@
 
 The TCS34725 is an advanced RGB color sensor that can measure these light qualities:
 
+**🆕 Normalization & Spectral Mapping Enhancements:**
+- Raw RGB+clear counts are now normalized by gain and integration time, ensuring consistent, comparable measurements.
+- Each channel is mapped to wavelength bins with proper overlap, and the total energy is preserved by rescaling after mapping.
+- Calibration factors (scaling_factor, lux_calibration) can be set and validated for precise adjustment.
+- Improved spectral fusion logic enables accurate combination with other sensor types (AS7262, TSL2591, etc.).
+- See [docs/NORMALIZED_SPECTRAL_CALCULATIONS.md](NORMALIZED_SPECTRAL_CALCULATIONS.md) for technical details.
+
 ### 🔬 **Raw Light Measurements**
 - **Red Channel** - Intensity of red light (raw counts)
 - **Green Channel** - Intensity of green light (raw counts)  

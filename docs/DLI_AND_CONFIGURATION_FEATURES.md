@@ -2,6 +2,14 @@
 
 ## 🌱 Daily Light Integral (DLI) System
 
+**🆕 Sensor Mapping & Calibration Enhancements:**
+- Sensor data used for DLI tracking now benefits from improved spectral fusion logic:
+  - **AS7262:** Gaussian mapping (FWHM 40nm) for each channel, energy-preserving integration
+  - **TCS34725:** Normalized RGB+clear mapping, with raw counts normalized by gain/integration time
+  - **TSL2591:** Broadband/visible/IR split, mapped to wavelength bins
+- Calibration factors are validated and can be set per sensor for precise adjustment
+- All sensor fusion is energy-preserving, ensuring accurate DLI calculation and cross-sensor consistency
+
 ### What is DLI?
 Daily Light Integral (DLI) measures the total amount of photosynthetically active radiation (PAR) a plant receives over a 24-hour period, expressed in mol/m²/day. This is crucial for:
 
